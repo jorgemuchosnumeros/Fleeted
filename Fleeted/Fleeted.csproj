@@ -57,8 +57,4 @@
             <HintPath>libs\UnityEngine.IMGUIModule.dll</HintPath>
         </Reference>
     </ItemGroup>
-
-    <ItemGroup>
-        <Folder Include="utils\"/>
-    </ItemGroup>
 </Project>

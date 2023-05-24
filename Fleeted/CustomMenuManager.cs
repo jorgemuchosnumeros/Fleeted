@@ -3,17 +3,22 @@ using System.Reflection;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Fleeted;
 
-[HarmonyPatch(typeof(MainMenuController), "Initialize")]
-public static class SpawnMenuPatch
+[HarmonyPatch(typeof(SceneManager), "Internal_SceneLoaded")]
+public static class BackToMenuPatch
 {
-    static void Postfix()
+    static void Postfix(Scene scene, LoadSceneMode mode)
     {
-        CustomMenuManager.Instance.CreateSpace();
-        CustomMenuManager.Instance.CreateOnlineOption();
-        CustomMenuManager.Instance.menuSpawned = true;
+        if (scene == SceneManager.GetSceneByName("Mainmenu"))
+        {
+            Plugin.Logger.LogInfo("Menu Loaded");
+            CustomMenuManager.Instance.CreateSpace();
+            CustomMenuManager.Instance.CreateOnlineOption();
+            CustomMenuManager.Instance.menuSpawned = true;
+        }
     }
 }
 
@@ -31,16 +36,23 @@ public class CustomMenuManager : MonoBehaviour
     public GameObject netIcon;
     public GameObject playLocalOption;
     public GameObject playOnlineOption;
+    public GameObject shipCursor;
+
+    public MainMenuController mainMenuController;
+    private Sprite _connectSprite;
 
     private TextMeshProUGUI _playLocalTMP;
     private TextMeshProUGUI _playOnlineTMP;
-    private Sprite connectSprite;
+    public TimedAction DelayCorrection = new(0.5f);
+    private bool doOnceFlag;
 
     private SpriteRenderer iconRenderer;
 
     public void Awake()
     {
         Instance = this;
+
+        DelayCorrection.Start();
 
         using var connectIconResource =
             Assembly.GetExecutingAssembly().GetManifestResourceStream("Fleeted.assets.connect_icon.png");
@@ -50,7 +62,7 @@ public class CustomMenuManager : MonoBehaviour
         var imageBytes = resourceMemory.ToArray();
         Texture2D tex2D = new Texture2D(2, 2);
         tex2D.LoadImage(imageBytes);
-        connectSprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), Vector2.zero, 50f);
+        _connectSprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), Vector2.zero, 50f);
     }
 
     private void Update()
@@ -58,11 +70,38 @@ public class CustomMenuManager : MonoBehaviour
         if (!menuSpawned)
             return;
 
+        if (GlobalController.globalController.screen == GlobalController.screens.mainmenu)
+        {
+            if (!DelayCorrection.TrueDone())
+                DelayCorrection.Start();
+
+            if (DelayCorrection.TrueDone())
+                DelayCorrection.Start();
+            else
+                return;
+        }
+        else
+        {
+            DelayCorrection.TurnOff();
+            return;
+        }
+
         playLocalOption.transform.position = new Vector3(7.364f, 4.64f, 0f);
         _playLocalTMP.text = "Play (Local)";
 
         playOnlineOption.transform.position = new Vector3(7.364f, -0.36f, 0);
         _playOnlineTMP.text = "Play (Online)";
+
+        if (mainMenuController.selection == 7 && !doOnceFlag)
+        {
+            shipCursor.transform.position -= Vector3.up * 4.704f;
+            doOnceFlag = true;
+        }
+        else if (mainMenuController.selection < 7 && doOnceFlag)
+        {
+            shipCursor.transform.position += Vector3.up * 4.704f;
+            doOnceFlag = false;
+        }
     }
 
     public void CreateSpace()
@@ -74,6 +113,9 @@ public class CustomMenuManager : MonoBehaviour
         icons = GameObject.Find("MainMenu/Icons");
         shipsIcon = GameObject.Find("MainMenu/Icons/ships_icon");
         playLocalOption = GameObject.Find("MainMenu/Canvas/Options/Play");
+        shipCursor = GameObject.Find("MainMenu/ShipContainer/ShipContainer2/Ship");
+
+        mainMenuController = FindObjectOfType<MainMenuController>().GetComponent<MainMenuController>();
 
         _playLocalTMP = playLocalOption.GetComponent<TextMeshProUGUI>();
 
@@ -97,6 +139,6 @@ public class CustomMenuManager : MonoBehaviour
 
         netIcon.transform.position = new Vector3(-12.44f, -2.3f, 0);
         netIcon.transform.localScale = Vector3.one * 1.05f;
-        iconRenderer.sprite = connectSprite;
+        iconRenderer.sprite = _connectSprite;
     }
 }
