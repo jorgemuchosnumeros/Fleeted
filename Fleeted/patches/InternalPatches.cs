@@ -12,12 +12,12 @@ public static class MenuLoaded
         {
             Plugin.Logger.LogInfo("Menu Loaded");
 
-            CustomMenuManager.Instance.MapMenuGameObjects();
+            CustomMenuManager.Instance.MapMainMenu();
             CustomMenuManager.Instance.CreateMainMenuSpace();
             CustomMenuManager.Instance.CreateMainMenuOnlineOption();
 
             CustomMenuManager.Instance.MapOptionsMenu();
-            CustomMenuManager.Instance.SaveOnlineMenuSpace();
+            CustomMenuManager.Instance.SaveOptionsMenuSpace();
 
             CustomMenuManager.Instance.menuSpawned = true;
         }

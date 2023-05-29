@@ -25,6 +25,8 @@
 
     <ItemGroup>
         <EmbeddedResource Include="assets\connect_icon.png"/>
+        <EmbeddedResource Include="assets\host_icon.png"/>
+        <EmbeddedResource Include="assets\join_icon.png"/>
     </ItemGroup>
 
     <ItemGroup>
