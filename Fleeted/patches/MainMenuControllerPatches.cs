@@ -15,7 +15,7 @@ public static class ApplyPlayOnlinePatch
         if (IsOnlineOptionSelected)
         {
             ShowPlayOnlineMenu.IsCalledFromApplyOptions = true;
-            CustomMenuManager.Instance.ApplyPlayOnline();
+            CustomOnlineMenuManager.Instance.ApplyPlayOnline();
             return;
         }
     }

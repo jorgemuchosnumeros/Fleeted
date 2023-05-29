@@ -12,14 +12,14 @@ public static class MenuLoaded
         {
             Plugin.Logger.LogInfo("Menu Loaded");
 
-            CustomMenuManager.Instance.MapMainMenu();
-            CustomMenuManager.Instance.CreateMainMenuSpace();
-            CustomMenuManager.Instance.CreateMainMenuOnlineOption();
+            CustomMainMenuManager.Instance.MapMainMenu();
+            CustomMainMenuManager.Instance.CreateMainMenuSpace();
+            CustomMainMenuManager.Instance.CreateMainMenuOnlineOption();
 
-            CustomMenuManager.Instance.MapOptionsMenu();
-            CustomMenuManager.Instance.SaveOptionsMenuSpace();
+            CustomOnlineMenuManager.Instance.MapOptionsMenu();
+            CustomOnlineMenuManager.Instance.SaveOptionsMenuSpace();
 
-            CustomMenuManager.Instance.menuSpawned = true;
+            CustomMainMenuManager.Instance.menuSpawned = true;
         }
     }
 }

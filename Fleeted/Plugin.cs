@@ -34,9 +34,13 @@ namespace Fleeted
             {
                 firstSteamworksInit = true;
 
-                var customMenuManager = new GameObject("CustomMenuManager");
-                customMenuManager.AddComponent<CustomMenuManager>();
-                DontDestroyOnLoad(customMenuManager);
+                var customMainMenuManager = new GameObject("CustomMainMenuManager");
+                customMainMenuManager.AddComponent<CustomMainMenuManager>();
+                DontDestroyOnLoad(customMainMenuManager);
+
+                var customOnlineMenuManager = new GameObject("CustomOnlineMenuManager");
+                customOnlineMenuManager.AddComponent<CustomOnlineMenuManager>();
+                DontDestroyOnLoad(customOnlineMenuManager);
             }
         }
 

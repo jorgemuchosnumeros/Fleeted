@@ -7,13 +7,13 @@ public static class ShowPlayOnlineMenu
 {
     public static bool IsCalledFromApplyOptions;
 
-    static void Postfix(MMContainersController __instance)
+    static void Postfix()
     {
         if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
         {
             if (!IsCalledFromApplyOptions)
                 return;
-            CustomMenuManager.Instance.ShowPlayOnlineMenu(__instance);
+            CustomOnlineMenuManager.Instance.ShowPlayOnlineMenu();
             IsCalledFromApplyOptions = false;
         }
     }
@@ -22,11 +22,11 @@ public static class ShowPlayOnlineMenu
 [HarmonyPatch(typeof(MMContainersController), "HideOptions")]
 public static class HidePlayOnlineMenu
 {
-    static void Postfix(MMContainersController __instance)
+    static void Postfix()
     {
         if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
         {
-            CustomMenuManager.Instance.HidePlayOnlineMenu(__instance);
+            CustomOnlineMenuManager.Instance.StartCoroutine(CustomOnlineMenuManager.Instance.HidePlayOnlineMenu());
         }
     }
 }

@@ -10,7 +10,7 @@ public static class ManageInputOnlinePatch
 
     static bool Prefix(OptionsMenuController __instance)
     {
-        if (CustomMenuManager.Instance.moveOnlineOptions)
+        if (CustomOnlineMenuManager.Instance.moveOnlineOptions)
         {
             OnlineSelection = __instance.shipSelector.GetInteger("selection");
             OptionsMenuControllerPatches.ManageInputOnline(__instance);
