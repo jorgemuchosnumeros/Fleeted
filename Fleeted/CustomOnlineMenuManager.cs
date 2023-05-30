@@ -12,9 +12,9 @@ public class CustomOnlineMenuManager : MonoBehaviour
 {
     public static CustomOnlineMenuManager Instance;
 
-    public GameObject optionsCanvas;
-    public GameObject optionsIcons;
-    public GameObject optionsMenuHeader;
+    public GameObject canvas;
+    public GameObject icons;
+    public GameObject menuHeader;
     public GameObject settingsOption;
     public GameObject settingsIcon;
     public GameObject galleryOption;
@@ -29,27 +29,27 @@ public class CustomOnlineMenuManager : MonoBehaviour
     public GameObject creditsIcon;
     public GameObject dataIcon;
     public GameObject backIcon;
-    public GameObject shipCursorOptions;
+    public GameObject shipCursor;
 
     public bool moveOnlineOptions;
 
     public Sprite hostSprite;
     public Sprite joinSprite;
 
-    private readonly TimedAction _delayCorrectionOm = new(0.25f);
-    private bool _delayCorrectionOMFlag;
+    private readonly TimedAction _delayCorrection = new(0.25f);
+    private bool _delayCorrectionFlag;
     private SpriteRenderer _galleryIconRenderer;
-    private TextMeshProUGUI _galleryOptionTMP;
+    private TextMeshProUGUI _galleryTMP;
 
-    private TextMeshProUGUI _menuHeaderOptionsTMP;
+    private TextMeshProUGUI _menuHeaderTMP;
 
     private Sprite _prevGalleryIconSprite;
     private Sprite _prevSettingsIconSprite;
 
     private SpriteRenderer _settingsIconRenderer;
-    private TextMeshProUGUI _settingsOptionTMP;
+    private TextMeshProUGUI _settingsTMP;
 
-    private Animator _shipAnimatorOM;
+    private Animator _shipAnimator;
 
     private void Awake()
     {
@@ -77,17 +77,17 @@ public class CustomOnlineMenuManager : MonoBehaviour
         joinSprite = Sprite.Create(joinTex2D, new Rect(0, 0, joinTex2D.width, joinTex2D.height), Vector2.zero, 50f);
     }
 
-    public void ApplyOnlineMenuTransforms()
+    public void ApplyTransforms()
     {
         if (GlobalController.globalController.screen == GlobalController.screens.optionsmenu)
         {
-            if (_delayCorrectionOMFlag)
+            if (_delayCorrectionFlag)
             {
-                _delayCorrectionOm.Start();
-                _delayCorrectionOMFlag = false;
+                _delayCorrection.Start();
+                _delayCorrectionFlag = false;
             }
 
-            if (!_delayCorrectionOm.TrueDone())
+            if (!_delayCorrection.TrueDone())
                 return;
 
             if (moveOnlineOptions)
@@ -96,20 +96,20 @@ public class CustomOnlineMenuManager : MonoBehaviour
 
                 CustomMainMenuManager.Instance.shipCursorTarget = new Vector3(-20.5f, 3.35f - menuBoatScalar);
 
-                if ((shipCursorOptions.transform.position - CustomMainMenuManager.Instance.shipCursorTarget)
+                if ((shipCursor.transform.position - CustomMainMenuManager.Instance.shipCursorTarget)
                     .sqrMagnitude > 0.005f)
                 {
-                    shipCursorOptions.transform.position = Vector3.MoveTowards(shipCursorOptions.transform.position,
+                    shipCursor.transform.position = Vector3.MoveTowards(shipCursor.transform.position,
                         CustomMainMenuManager.Instance.shipCursorTarget, 75f * Time.deltaTime);
                 }
 
                 backOption.transform.position = new Vector3(7.8f, -8.8f, 0);
-                optionsCanvas.transform.position = new Vector3(0, -10, 0);
+                canvas.transform.position = new Vector3(0, -10, 0);
                 backIcon.transform.position = new Vector3(-16, -8.8f, 0);
-                optionsIcons.transform.position = new Vector3(0, -10, 0);
+                icons.transform.position = new Vector3(0, -10, 0);
                 settingsIcon.transform.position = new Vector3(-18.3f, 1.1f, 0);
                 settingsIcon.transform.localScale = Vector3.one;
-                galleryIcon.transform.position = new Vector3(-18.5f, -4.8f, 0);
+                galleryIcon.transform.position = new Vector3(-18.5f, -5, 0);
                 galleryIcon.transform.localScale = Vector3.one;
             }
             else
@@ -118,23 +118,23 @@ public class CustomOnlineMenuManager : MonoBehaviour
                 galleryIcon.transform.position = new Vector3(-16, 7.09f, 0);
                 settingsIcon.transform.localScale = Vector3.one * 0.8f;
                 settingsIcon.transform.position = new Vector3(-16, 13.11f, 0);
-                optionsIcons.transform.position = new Vector3(0, 0, 0);
+                icons.transform.position = new Vector3(0, 0, 0);
                 backIcon.transform.position = new Vector3(-16, -23, 0);
-                optionsCanvas.transform.position = new Vector3(0, 0, 0);
+                canvas.transform.position = new Vector3(0, 0, 0);
                 backOption.transform.position = new Vector3(7.8f, -22.8f, 0);
             }
         }
         else
         {
-            _delayCorrectionOMFlag = true;
+            _delayCorrectionFlag = true;
         }
     }
 
-    public void MapOptionsMenu()
+    public void MapMenu()
     {
-        optionsCanvas = GameObject.Find("Options/OptionsMenu/Canvas");
-        optionsIcons = GameObject.Find("Options/OptionsMenu/Icons");
-        optionsMenuHeader = GameObject.Find("/Options/OptionsMenu/Canvas/Options");
+        canvas = GameObject.Find("Options/OptionsMenu/Canvas");
+        icons = GameObject.Find("Options/OptionsMenu/Icons");
+        menuHeader = GameObject.Find("/Options/OptionsMenu/Canvas/Options");
         settingsOption = GameObject.Find("Options/OptionsMenu/Canvas/Settings");
         settingsIcon = GameObject.Find("Options/OptionsMenu/Icons/gear_icon");
         galleryOption = GameObject.Find("Options/OptionsMenu/Canvas/Gallery");
@@ -149,32 +149,27 @@ public class CustomOnlineMenuManager : MonoBehaviour
         creditsIcon = GameObject.Find("Options/OptionsMenu/Icons/credits_icon");
         dataIcon = GameObject.Find("Options/OptionsMenu/Icons/icon_data");
         backIcon = GameObject.Find("Options/OptionsMenu/Icons/arrow_icon");
-        shipCursorOptions = GameObject.Find("Options/OptionsMenu/ShipContainer");
+        shipCursor = GameObject.Find("Options/OptionsMenu/ShipContainer");
 
-        _menuHeaderOptionsTMP = optionsMenuHeader.GetComponent<TextMeshProUGUI>();
-        _shipAnimatorOM = shipCursorOptions.GetComponent<Animator>();
-        _settingsOptionTMP = settingsOption.GetComponent<TextMeshProUGUI>();
-        _galleryOptionTMP = galleryOption.GetComponent<TextMeshProUGUI>();
+        _menuHeaderTMP = menuHeader.GetComponent<TextMeshProUGUI>();
+        _shipAnimator = shipCursor.GetComponent<Animator>();
+        _settingsTMP = settingsOption.GetComponent<TextMeshProUGUI>();
+        _galleryTMP = galleryOption.GetComponent<TextMeshProUGUI>();
         _settingsIconRenderer = settingsIcon.GetComponent<SpriteRenderer>();
         _galleryIconRenderer = galleryIcon.GetComponent<SpriteRenderer>();
     }
 
-    public void SaveOptionsMenuSpace()
+    public void SaveMenuSpace()
     {
         _prevSettingsIconSprite = _settingsIconRenderer.sprite;
         _prevGalleryIconSprite = _galleryIconRenderer.sprite;
     }
 
-    public void ApplyPlayOnline()
-    {
-        Plugin.Logger.LogInfo("Play Online!");
-    }
-
     public void ShowPlayOnlineMenu() // Modify Options Menu
     {
-        _menuHeaderOptionsTMP.text = "Online";
-        _settingsOptionTMP.text = "Host";
-        _galleryOptionTMP.text = "Join";
+        _menuHeaderTMP.text = "Online";
+        _settingsTMP.text = "Host";
+        _galleryTMP.text = "Join";
 
         _settingsIconRenderer.sprite = hostSprite;
         _galleryIconRenderer.sprite = joinSprite;
@@ -190,14 +185,14 @@ public class CustomOnlineMenuManager : MonoBehaviour
 
         moveOnlineOptions = true;
 
-        _shipAnimatorOM.enabled = false;
+        _shipAnimator.enabled = false;
     }
 
     public IEnumerator HidePlayOnlineMenu() // Restore Options Menu
     {
         yield return new WaitForSeconds(0.2f);
 
-        _shipAnimatorOM.enabled = true;
+        _shipAnimator.enabled = true;
 
         moveOnlineOptions = false;
 

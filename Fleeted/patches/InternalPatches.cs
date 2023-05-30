@@ -15,11 +15,13 @@ public static class MenuLoaded
             CustomMainMenuManager.Instance.MapMainMenu();
             CustomMainMenuManager.Instance.CreateMainMenuSpace();
             CustomMainMenuManager.Instance.CreateMainMenuOnlineOption();
-
-            CustomOnlineMenuManager.Instance.MapOptionsMenu();
-            CustomOnlineMenuManager.Instance.SaveOptionsMenuSpace();
-
             CustomMainMenuManager.Instance.menuSpawned = true;
+
+            CustomOnlineMenuManager.Instance.MapMenu();
+            CustomOnlineMenuManager.Instance.SaveMenuSpace();
+
+            CustomSettingsMenuManager.Instance.MapMenu();
+            CustomSettingsMenuManager.Instance.SaveMenuSpace();
         }
     }
 }

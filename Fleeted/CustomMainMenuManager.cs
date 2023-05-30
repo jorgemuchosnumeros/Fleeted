@@ -28,24 +28,24 @@ public class CustomMainMenuManager : MonoBehaviour
 
     public Vector3 shipCursorTarget;
 
-    private readonly TimedAction _delayCorrectionMm = new(0.25f);
-    private readonly TimedAction _delayDisableAnimatorMm = new(0.4f);
+    private readonly TimedAction _delayCorrection = new(0.25f);
+    private readonly TimedAction _delayDisableAnimator = new(0.4f);
 
     private SpriteRenderer _connectIconRenderer;
     private Sprite _connectSprite;
 
-    private bool _delayCorrectionMMFlag;
+    private bool _delayCorrectionFlag;
 
     private TextMeshProUGUI _playLocalTMP;
     private TextMeshProUGUI _playOnlineTMP;
 
-    private Animator _shipAnimatorMm;
+    private Animator _shipAnimator;
 
     public void Awake()
     {
         Instance = this;
 
-        _delayCorrectionMm.Start();
+        _delayCorrection.Start();
 
         // Convert "assets/*_icon.png" to Sprites
         using var connectIconResource =
@@ -67,23 +67,24 @@ public class CustomMainMenuManager : MonoBehaviour
             return;
 
         ApplyMainMenuTransforms();
-        CustomOnlineMenuManager.Instance.ApplyOnlineMenuTransforms();
+        CustomOnlineMenuManager.Instance.ApplyTransforms();
+        CustomSettingsMenuManager.Instance.ApplyTransforms();
     }
 
     private void ApplyMainMenuTransforms()
     {
         if (GlobalController.globalController.screen == GlobalController.screens.mainmenu)
         {
-            if (_shipAnimatorMm == null)
+            if (_shipAnimator == null)
                 return;
-            // Disabled the Animator of the Boat Cursor on the Main Menu and Remake the animations to support the 7th Option
+
             if (mainMenuController.selection > 0)
             {
-                if (_shipAnimatorMm.isActiveAndEnabled)
+                if (_shipAnimator.isActiveAndEnabled)
                 {
-                    if (!_delayDisableAnimatorMm.HasEverStated)
-                        _delayDisableAnimatorMm.Start();
-                    _shipAnimatorMm.enabled = !_delayDisableAnimatorMm.TrueDone();
+                    if (!_delayDisableAnimator.HasEverStated)
+                        _delayDisableAnimator.Start();
+                    _shipAnimator.enabled = !_delayDisableAnimator.TrueDone();
                 }
 
                 var menuBoatScalar = (mainMenuController.selection - 1) * 4.8f;
@@ -97,13 +98,13 @@ public class CustomMainMenuManager : MonoBehaviour
                 }
             }
 
-            if (_delayCorrectionMMFlag)
+            if (_delayCorrectionFlag)
             {
-                _delayCorrectionMm.Start();
-                _delayCorrectionMMFlag = false;
+                _delayCorrection.Start();
+                _delayCorrectionFlag = false;
             }
 
-            if (_delayCorrectionMm.TrueDone())
+            if (_delayCorrection.TrueDone())
             {
                 // Pinning the Custom Options
                 playLocalOption.transform.position = new Vector3(7.364f, 4.64f, 0f);
@@ -115,7 +116,7 @@ public class CustomMainMenuManager : MonoBehaviour
         }
         else
         {
-            _delayCorrectionMMFlag = true;
+            _delayCorrectionFlag = true;
         }
     }
 
@@ -134,12 +135,12 @@ public class CustomMainMenuManager : MonoBehaviour
         mainMenuController = FindObjectOfType<MainMenuController>().GetComponent<MainMenuController>();
 
         _playLocalTMP = playLocalOption.GetComponent<TextMeshProUGUI>();
-        _shipAnimatorMm = shipAnimated.GetComponent<Animator>();
+        _shipAnimator = shipAnimated.GetComponent<Animator>();
     }
 
     public void CreateMainMenuSpace()
     {
-        _delayDisableAnimatorMm.HasEverStated = false;
+        _delayDisableAnimator.HasEverStated = false;
 
         mainMenu.transform.localScale = Vector3.one * 0.8f;
         title.transform.localScale = Vector3.one * 1.25f;

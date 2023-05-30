@@ -41,6 +41,10 @@ namespace Fleeted
                 var customOnlineMenuManager = new GameObject("CustomOnlineMenuManager");
                 customOnlineMenuManager.AddComponent<CustomOnlineMenuManager>();
                 DontDestroyOnLoad(customOnlineMenuManager);
+
+                var customSettingsMenuManager = new GameObject("CustomSettingsMenuManager");
+                customSettingsMenuManager.AddComponent<CustomSettingsMenuManager>();
+                DontDestroyOnLoad(customSettingsMenuManager);
             }
         }
 
