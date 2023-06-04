@@ -19,38 +19,50 @@ namespace Fleeted
         {
             Logger = base.Logger;
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
-            SteamAPI.Init();
 
             new Harmony("patch.fleeted").PatchAll();
         }
 
         void Update()
         {
-            if (!SteamManager.Initialized)
+            if (!SteamClient.IsValid)
                 return;
 
-            SteamAPI.RunCallbacks();
+            SteamClient.RunCallbacks();
             if (!firstSteamworksInit)
             {
                 firstSteamworksInit = true;
 
-                var customMainMenuManager = new GameObject("CustomMainMenuManager");
-                customMainMenuManager.AddComponent<CustomMainMenuManager>();
-                DontDestroyOnLoad(customMainMenuManager);
+                var customMainMenu = new GameObject("CustomMainMenu");
+                customMainMenu.AddComponent<CustomMainMenu>();
+                DontDestroyOnLoad(customMainMenu);
 
-                var customOnlineMenuManager = new GameObject("CustomOnlineMenuManager");
-                customOnlineMenuManager.AddComponent<CustomOnlineMenuManager>();
-                DontDestroyOnLoad(customOnlineMenuManager);
+                var customOnlineMenu = new GameObject("CustomOnlineMenu");
+                customOnlineMenu.AddComponent<CustomOnlineMenu>();
+                DontDestroyOnLoad(customOnlineMenu);
 
-                var customSettingsMenuManager = new GameObject("CustomSettingsMenuManager");
-                customSettingsMenuManager.AddComponent<CustomSettingsMenuManager>();
-                DontDestroyOnLoad(customSettingsMenuManager);
+                var customSettingsMenu = new GameObject("CustomSettingsMenu");
+                customSettingsMenu.AddComponent<CustomSettingsMenu>();
+                DontDestroyOnLoad(customSettingsMenu);
+
+                var arrowJoinInput = new GameObject("ArrowJoinInput");
+                arrowJoinInput.AddComponent<ArrowJoinInput>();
+                DontDestroyOnLoad(arrowJoinInput);
+
+                var customLobbyMenu = new GameObject("CustomLobbyMenu");
+                customLobbyMenu.AddComponent<CustomLobbyMenu>();
+                DontDestroyOnLoad(customLobbyMenu);
             }
         }
 
         private void OnGUI()
         {
             GUI.Label(new Rect(10, Screen.height - 20, 400, 40), $"Fleeted ID: {BuildGUID}");
+        }
+
+        private void OnApplicationQuit()
+        {
+            SteamClient.Shutdown();
         }
     }
 }

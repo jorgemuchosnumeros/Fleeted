@@ -1,15 +1,18 @@
 ﻿using System.Collections;
+using Fleeted.patches;
 using Fleeted.utils;
 using TMPro;
 using UnityEngine;
 
 namespace Fleeted;
 
-public class CustomSettingsMenuManager : MonoBehaviour
+public class CustomSettingsMenu : MonoBehaviour
 {
-    public static CustomSettingsMenuManager Instance;
+    public static CustomSettingsMenu Instance;
 
     public bool moveOptions;
+
+    public SettingsMenuController settingsControllerInstance;
 
     public GameObject menuHeader;
     public GameObject resolution;
@@ -24,13 +27,16 @@ public class CustomSettingsMenuManager : MonoBehaviour
     public GameObject controllerRumble;
     public GameObject resolutionValue;
     public GameObject resolutionRightArrow;
+    public GameObject fullscreenValue;
     public GameObject back;
     private TextMeshProUGUI _applyTMP;
 
     private TimedAction _delayCorrection = new(0.25f);
-    private bool _delayCorrectionFlag;
-    private TextMeshProUGUI _fullscreenTMP;
 
+    private bool _delayCorrectionFlag;
+
+    private TextMeshProUGUI _fullscreenTMP;
+    private TextMeshProUGUI _fullscreenValueTMP;
     private TextMeshProUGUI _menuHeaderTMP;
     private string _prevApplyText;
     private string _prevFullscreenText;
@@ -47,13 +53,9 @@ public class CustomSettingsMenuManager : MonoBehaviour
         Instance = this;
     }
 
-    public void CreateLobby(int memberLimitSelection, bool isFriendsOnly)
-    {
-        Plugin.Logger.LogInfo($"Create Lobby with limit of {memberLimitSelection} as {isFriendsOnly} FriendsOnly");
-    }
-
     public void MapMenu()
     {
+        settingsControllerInstance = FindObjectOfType<SettingsMenuController>();
         menuHeader = GameObject.Find("Options/Settings/Canvas/Settings");
         resolution = GameObject.Find("Options/Settings/Canvas/Resolution/Label");
         fullscreen = GameObject.Find("Options/Settings/Canvas/Full screen/Label");
@@ -67,6 +69,7 @@ public class CustomSettingsMenuManager : MonoBehaviour
         controllerRumble = GameObject.Find("Options/Settings/Canvas/Controller rumble");
         resolutionValue = GameObject.Find("Options/Settings/Canvas/Resolution/Value");
         resolutionRightArrow = GameObject.Find("Options/Settings/Canvas/Resolution/>");
+        fullscreenValue = GameObject.Find("Options/Settings/Canvas/Full screen/Value");
 
         back = GameObject.Find("Options/Settings/Canvas/Back");
 
@@ -76,6 +79,7 @@ public class CustomSettingsMenuManager : MonoBehaviour
         _applyTMP = apply.GetComponent<TextMeshProUGUI>();
         _resolutionValueTMP = resolutionValue.GetComponent<TextMeshProUGUI>();
         _resolutionRightArrowTMP = resolutionRightArrow.GetComponent<TextMeshProUGUI>();
+        _fullscreenValueTMP = fullscreenValue.GetComponent<TextMeshProUGUI>();
     }
 
     public void ApplyTransforms()
@@ -111,7 +115,7 @@ public class CustomSettingsMenuManager : MonoBehaviour
     {
         moveOptions = true;
 
-        CustomOnlineMenuManager.Instance.ShowPlayOnlineMenu();
+        CustomOnlineMenu.Instance.ShowPlayOnlineMenu();
 
         _menuHeaderTMP.text = "Host";
         _resolutionTMP.text = "Max Players";
@@ -125,8 +129,12 @@ public class CustomSettingsMenuManager : MonoBehaviour
         soundsVolume.SetActive(false);
         voicesVolume.SetActive(false);
 
-        _resolutionValueTMP.text = "8";
-        _resolutionRightArrowTMP.color = FindObjectOfType<SettingsMenuController>().disabledColor;
+        _resolutionValueTMP.text = SettingsMenuControllerPatches.memberLimitSelection.ToString();
+        if (_resolutionValueTMP.text == "8")
+            _resolutionRightArrowTMP.color = settingsControllerInstance.disabledColor;
+
+        _fullscreenValueTMP.text = SettingsMenuControllerPatches.isFriendsOnly ? "Yes" : "No";
+
         // FIXME: Probably the controller option will freak out
         // when plugged in, but I dont have the means to test this
     }
@@ -137,7 +145,7 @@ public class CustomSettingsMenuManager : MonoBehaviour
 
         moveOptions = false;
 
-        CustomOnlineMenuManager.Instance.ShowPlayOnlineMenu();
+        CustomOnlineMenu.Instance.ShowPlayOnlineMenu();
 
         language.SetActive(true);
         sideArt.SetActive(true);

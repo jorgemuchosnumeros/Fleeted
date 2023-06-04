@@ -12,16 +12,21 @@ public static class MenuLoaded
         {
             Plugin.Logger.LogInfo("Menu Loaded");
 
-            CustomMainMenuManager.Instance.MapMainMenu();
-            CustomMainMenuManager.Instance.CreateMainMenuSpace();
-            CustomMainMenuManager.Instance.CreateMainMenuOnlineOption();
-            CustomMainMenuManager.Instance.menuSpawned = true;
+            CustomMainMenu.Instance.MapMainMenu();
+            CustomMainMenu.Instance.CreateMainMenuSpace();
+            CustomMainMenu.Instance.CreateMainMenuOnlineOption();
+            CustomMainMenu.Instance.menuSpawned = true;
 
-            CustomOnlineMenuManager.Instance.MapMenu();
-            CustomOnlineMenuManager.Instance.SaveMenuSpace();
+            CustomOnlineMenu.Instance.MapMenu();
+            CustomOnlineMenu.Instance.SaveMenuSpace();
 
-            CustomSettingsMenuManager.Instance.MapMenu();
-            CustomSettingsMenuManager.Instance.SaveMenuSpace();
+            CustomSettingsMenu.Instance.MapMenu();
+            CustomSettingsMenu.Instance.SaveMenuSpace();
+
+            ArrowJoinInput.Instance.MapJoin();
+
+            CustomLobbyMenu.Instance.MapLobby();
+            CustomLobbyMenu.Instance.SaveLobby();
         }
     }
 }

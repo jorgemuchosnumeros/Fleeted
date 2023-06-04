@@ -10,7 +10,7 @@ public static class ManageInputOnlinePatch
 
     static bool Prefix(OptionsMenuController __instance)
     {
-        if (CustomOnlineMenuManager.Instance.moveOnlineOptions)
+        if (CustomOnlineMenu.Instance.moveOnlineOptions)
         {
             OnlineSelection = __instance.shipSelector.GetInteger("selection");
             OptionsMenuControllerPatches.ManageInputOnline(__instance);
@@ -25,8 +25,11 @@ public static class OptionsMenuControllerPatches
 {
     public static void ManageInputOnline(OptionsMenuController __instance)
     {
+        if (ArrowJoinInput.Instance.isInputLocked)
+            return;
+
         if ((bool) typeof(OptionsMenuController).GetField("inCooldown", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.GetValue(__instance))
+                ?.GetValue(__instance)!)
         {
             return;
         }
@@ -88,9 +91,8 @@ public static class OptionsMenuControllerPatches
             }
             else if (__instance.shipSelector.GetInteger("selection") == 2)
             {
-                GlobalController.globalController.screen = GlobalController.screens.gallerymenu;
                 __instance.gallery.SetActive(value: true);
-                MMContainersController.mmContainersController.ShowGallery();
+                ArrowJoinInput.Instance.JoinArrowField();
                 GlobalAudio.globalAudio.PlayAccept();
             }
             else if (__instance.shipSelector.GetInteger("selection") == 3)

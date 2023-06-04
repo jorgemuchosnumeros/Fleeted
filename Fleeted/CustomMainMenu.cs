@@ -1,14 +1,12 @@
-﻿using System.IO;
-using System.Reflection;
-using Fleeted.utils;
+﻿using Fleeted.utils;
 using TMPro;
 using UnityEngine;
 
 namespace Fleeted;
 
-public class CustomMainMenuManager : MonoBehaviour
+public class CustomMainMenu : MonoBehaviour
 {
-    public static CustomMainMenuManager Instance;
+    public static CustomMainMenu Instance;
     public bool menuSpawned;
 
     // Main Menu
@@ -47,18 +45,7 @@ public class CustomMainMenuManager : MonoBehaviour
 
         _delayCorrection.Start();
 
-        // Convert "assets/*_icon.png" to Sprites
-        using var connectIconResource =
-            Assembly.GetExecutingAssembly().GetManifestResourceStream("Fleeted.assets.connect_icon.png");
-
-        using var connectIconResourceMemory = new MemoryStream();
-        connectIconResourceMemory.SetLength(0);
-        connectIconResource.CopyTo(connectIconResourceMemory);
-        var imageBytes = connectIconResourceMemory.ToArray();
-        Texture2D connectTex2D = new Texture2D(2, 2);
-        connectTex2D.LoadImage(imageBytes);
-        _connectSprite = Sprite.Create(connectTex2D, new Rect(0, 0, connectTex2D.width, connectTex2D.height),
-            Vector2.zero, 50f);
+        _connectSprite = SpritesExtra.SpriteFromName("Fleeted.assets.connect_icon.png");
     }
 
     private void Update()
@@ -67,8 +54,8 @@ public class CustomMainMenuManager : MonoBehaviour
             return;
 
         ApplyMainMenuTransforms();
-        CustomOnlineMenuManager.Instance.ApplyTransforms();
-        CustomSettingsMenuManager.Instance.ApplyTransforms();
+        CustomOnlineMenu.Instance.ApplyTransforms();
+        CustomSettingsMenu.Instance.ApplyTransforms();
     }
 
     private void ApplyMainMenuTransforms()
@@ -132,10 +119,18 @@ public class CustomMainMenuManager : MonoBehaviour
         shipCursor = GameObject.Find("MainMenu/ShipContainer/ShipContainer2/Ship");
         shipAnimated = GameObject.Find("MainMenu/ShipContainer");
 
-        mainMenuController = FindObjectOfType<MainMenuController>().GetComponent<MainMenuController>();
+        mainMenuController = FindObjectOfType<MainMenuController>();
 
         _playLocalTMP = playLocalOption.GetComponent<TextMeshProUGUI>();
         _shipAnimator = shipAnimated.GetComponent<Animator>();
+    }
+
+    public void ForceHideMenu(bool hide)
+    {
+        title.SetActive(!hide);
+        shipContainer.SetActive(!hide);
+        icons.SetActive(!hide);
+        canvas.GetComponent<Canvas>().enabled = !hide;
     }
 
     public void CreateMainMenuSpace()

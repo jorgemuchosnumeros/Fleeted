@@ -8,7 +8,7 @@ public static class ManageInputPatch
 {
     static bool Prefix(SettingsMenuController __instance)
     {
-        if (CustomSettingsMenuManager.Instance.moveOptions)
+        if (CustomSettingsMenu.Instance.moveOptions)
         {
             SettingsMenuControllerPatches.ManageInputLobbyCreate(__instance);
             return false;
@@ -20,8 +20,8 @@ public static class ManageInputPatch
 
 public static class SettingsMenuControllerPatches
 {
-    private static int memberLimitSelection = 8;
-    private static bool isFriendsOnly;
+    public static int memberLimitSelection = 8;
+    public static bool isFriendsOnly;
 
     public static void ManageInputLobbyCreate(SettingsMenuController instance)
     {
@@ -150,7 +150,8 @@ public static class SettingsMenuControllerPatches
 
     private static void CreateLobby(this SettingsMenuController instance)
     {
-        CustomSettingsMenuManager.Instance.CreateLobby(memberLimitSelection, isFriendsOnly);
+        CustomLobbyMenu.Instance.StartCoroutine(
+            CustomLobbyMenu.Instance.CreateLobby(memberLimitSelection, isFriendsOnly));
     }
 
     private static void SetMemberLimit(this SettingsMenuController instance, bool left)

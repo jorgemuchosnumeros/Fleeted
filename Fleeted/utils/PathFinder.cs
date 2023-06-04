@@ -2,7 +2,7 @@
 
 namespace Fleeted.utils;
 
-public static class Pathfinder
+public static class PathFinder
 {
     public static string GetPath(this Transform current)
     {

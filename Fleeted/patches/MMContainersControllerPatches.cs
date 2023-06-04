@@ -13,7 +13,7 @@ public static class ShowPlayOnlineMenu
         {
             if (!IsCalledFromApplyOptions)
                 return;
-            CustomOnlineMenuManager.Instance.ShowPlayOnlineMenu();
+            CustomOnlineMenu.Instance.ShowPlayOnlineMenu();
             IsCalledFromApplyOptions = false;
         }
     }
@@ -24,7 +24,7 @@ public static class HidePlayOnlineMenu
 {
     static void Postfix()
     {
-        CustomOnlineMenuManager.Instance.StartCoroutine(CustomOnlineMenuManager.Instance.HidePlayOnlineMenu());
+        CustomOnlineMenu.Instance.StartCoroutine(CustomOnlineMenu.Instance.HidePlayOnlineMenu());
     }
 }
 
@@ -35,7 +35,7 @@ public static class ShowLobbySettingsMenu
     {
         if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
         {
-            CustomSettingsMenuManager.Instance.ShowLobbySettingsMenu();
+            CustomSettingsMenu.Instance.ShowLobbySettingsMenu();
         }
     }
 }
@@ -47,8 +47,8 @@ public static class HideLobbySettingsMenu
     {
         if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
         {
-            CustomSettingsMenuManager.Instance.StartCoroutine(
-                CustomSettingsMenuManager.Instance.HideLobbySettingsMenu());
+            CustomSettingsMenu.Instance.StartCoroutine(
+                CustomSettingsMenu.Instance.HideLobbySettingsMenu());
         }
     }
 }

@@ -19,6 +19,16 @@ public static class ApplyPlayOnlinePatch
     }
 }
 
+[HarmonyPatch(typeof(MainMenuController), "BackFromPlayMenu")]
+public class PlayMenuControllerPatches
+{
+    static void Postfix(MainMenuController __instance)
+    {
+        if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
+            CustomLobbyMenu.Instance.HideLobbyMenu();
+    }
+}
+
 //Im so sorry, Alva
 /*
  * This Changes MainMenuController's Update Method from this:
