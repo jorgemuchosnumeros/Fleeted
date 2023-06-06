@@ -18,19 +18,36 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public static Lobby CurrentLobby;
 
+    public GameObject canvas;
+    public GameObject miniMenu;
     public GameObject info;
+    public Canvas canvasCanvas;
+
+
+    public GameObject copyButtonBg;
+    public Sprite buttonBgSprite;
+    public Sprite copySprite;
+    public Sprite eyeSprite;
+    public Sprite pointSprite;
+    public string joinArrowCode;
     private Result _createLobbyResult = Result.None;
     private TextMeshProUGUI _infoTMP;
 
     private bool _isFriendsOnly;
 
     private MMContainersController _mmContainersController;
+
     private Color _prevInfoColor;
     private string _prevInfoText;
 
     private void Awake()
     {
         Instance = this;
+
+        buttonBgSprite = SpritesExtra.SpriteFromName("Fleeted.assets.button_bg.png");
+        copySprite = SpritesExtra.SpriteFromName("Fleeted.assets.copy_icon.png");
+        eyeSprite = SpritesExtra.SpriteFromName("Fleeted.assets.eye_icon.png");
+        pointSprite = SpritesExtra.SpriteFromName("Fleeted.assets.dot.png");
     }
 
     private void Start()
@@ -63,6 +80,8 @@ public class CustomLobbyMenu : MonoBehaviour
  await WebRequestExtra.GetBodyFromWebRequest($"https://u.antonioma.com/fleeted/setLobby.php?id={lobby.Id}");
 #endif
 
+            joinArrowCode = body;
+
             Plugin.Logger.LogInfo($"Received Arrow Code: {body}");
 
             Plugin.Logger.LogInfo($"Created Lobby: {lobby}");
@@ -73,15 +92,19 @@ public class CustomLobbyMenu : MonoBehaviour
         CurrentLobby.SetPrivate();
 
         Plugin.Logger.LogInfo($"Lobby Code: {CurrentLobby.Id}");
-
-        _infoTMP.text = "Press a Button to Join or wait for other players";
         Plugin.Logger.LogInfo($"Joined Lobby: {lobby}");
         Plugin.Logger.LogInfo($"Owner: {lobby.Owner.Name}");
+
+        _infoTMP.text = "Press a Button to Join or wait for other players";
+
+        copyButtonBg = new GameObject("Custom Play Menu Buttons");
+        copyButtonBg.transform.SetParent(miniMenu.transform, false);
+        copyButtonBg.AddComponent<CustomPlayMenuButtons>();
     }
 
     public async void JoinByArrows(Arrows[] input)
     {
-        var joinArrowCode = String.Empty;
+        joinArrowCode = String.Empty;
         foreach (var arrow in input)
         {
             switch (arrow)
@@ -110,7 +133,7 @@ public class CustomLobbyMenu : MonoBehaviour
 
 
 #if GOLDBERG
-        var body = await WebRequestExtra.GetBodyFromWebRequest($"http://127.0.0.1:3001/getLobby");
+        var body = await WebRequestExtra.GetBodyFromWebRequest($"http://127.0.0.1:3001/getLobby?id=UUDDLR");
 #else
         var body =
  await WebRequestExtra.GetBodyFromWebRequest($"https://u.antonioma.com/fleeted/getLobby.php?code={joinArrowCode}");
@@ -146,7 +169,11 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public void MapLobby()
     {
+        canvas = GameObject.Find("PlayMenu/Canvas");
         info = GameObject.Find("PlayMenu/Canvas/Info");
+        miniMenu = GameObject.Find("PlayMenu/Canvas/MiniMenu");
+
+        canvasCanvas = canvas.GetComponent<Canvas>();
         _infoTMP = info.GetComponent<TextMeshProUGUI>();
         _mmContainersController = FindObjectOfType<MMContainersController>();
     }
@@ -173,5 +200,8 @@ public class CustomLobbyMenu : MonoBehaviour
 
         _infoTMP.text = _prevInfoText;
         _infoTMP.color = _prevInfoColor;
+
+        if (copyButtonBg != null)
+            Destroy(copyButtonBg);
     }
 }

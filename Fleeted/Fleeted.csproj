@@ -31,6 +31,10 @@
         <EmbeddedResource Include="assets\arrow_left_icon.png"/>
         <EmbeddedResource Include="assets\arrow_right_icon.png"/>
         <EmbeddedResource Include="assets\arrow_up_icon.png"/>
+        <EmbeddedResource Include="assets\copy_icon.png"/>
+        <EmbeddedResource Include="assets\eye_icon.png"/>
+        <EmbeddedResource Include="assets\button_bg.png"/>
+        <EmbeddedResource Include="assets\dot.png"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -69,6 +73,18 @@
         </Reference>
         <Reference Include="UnityEngine.IMGUIModule">
             <HintPath>libs\UnityEngine.IMGUIModule.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.InputLegacyModule">
+            <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.Physics2DModule">
+            <HintPath>libs\UnityEngine.Physics2DModule.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.UI">
+            <HintPath>libs\UnityEngine.UI.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.UIElementsModule">
+            <HintPath>libs\UnityEngine.UIElementsModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UIModule">
             <HintPath>libs\UnityEngine.UIModule.dll</HintPath>
