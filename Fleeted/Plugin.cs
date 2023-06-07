@@ -20,6 +20,8 @@ namespace Fleeted
             Logger = base.Logger;
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
 
+            Application.runInBackground = true;
+
             new Harmony("patch.fleeted").PatchAll();
         }
 
@@ -28,10 +30,15 @@ namespace Fleeted
             if (!SteamClient.IsValid)
                 return;
 
+
             SteamClient.RunCallbacks();
             if (!firstSteamworksInit)
             {
                 firstSteamworksInit = true;
+
+                var lobbyManager = new GameObject("LobbyManager");
+                lobbyManager.AddComponent<LobbyManager>();
+                DontDestroyOnLoad(lobbyManager);
 
                 var customMainMenu = new GameObject("CustomMainMenu");
                 customMainMenu.AddComponent<CustomMainMenu>();

@@ -42,6 +42,12 @@ public class ArrowJoinInput : MonoBehaviour
     {
         if (!isInputLocked) return;
 
+        if (GlobalController.globalController.screen != GlobalController.screens.optionsmenu)
+        {
+            ClearInput();
+            return;
+        }
+
         var isTypingAnArrow = InputController.inputController.inputs["1DDown"] ||
                               InputController.inputController.inputsRaw["0DDown"] ||
                               InputController.inputController.inputs["1LDown"] ||
@@ -84,26 +90,30 @@ public class ArrowJoinInput : MonoBehaviour
             InputController.inputController.inputsRaw["0BDown"])
         {
             isInputLocked = false;
-            CustomOnlineMenu.Instance.GalleryTMP.color =
-                CustomSettingsMenu.Instance.settingsControllerInstance.enabledColor;
-            _arrowsInput.Clear();
-            foreach (var arrowsGameObject in _arrowsGameObjects)
-            {
-                Destroy(arrowsGameObject);
-            }
-
+            ClearInput();
             GlobalAudio.globalAudio.PlayCancel();
         }
 
         if (InputController.inputController.inputsRaw["1ADown"] || InputController.inputController.inputsRaw["0ADown"])
         {
-            CustomLobbyMenu.Instance.JoinByArrows(_arrowsInput.Reverse().ToArray());
+            LobbyManager.Instance.JoinByArrows(_arrowsInput.Reverse().ToArray());
             GlobalAudio.globalAudio.PlayAccept();
         }
 
         if (isTypingAnArrow)
         {
             CreateArrows(_arrowsInput.ToArray());
+        }
+    }
+
+    private void ClearInput()
+    {
+        CustomOnlineMenu.Instance.GalleryTMP.color =
+            CustomSettingsMenu.Instance.settingsControllerInstance.enabledColor;
+        _arrowsInput.Clear();
+        foreach (var arrowsGameObject in _arrowsGameObjects)
+        {
+            Destroy(arrowsGameObject);
         }
     }
 

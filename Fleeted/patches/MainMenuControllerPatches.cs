@@ -11,11 +11,19 @@ public static class ApplyPlayOnlinePatch
 
     static void Prefix(MainMenuController __instance)
     {
-        IsOnlineOptionSelected = __instance.selection == 2;
         if (IsOnlineOptionSelected)
         {
             ShowPlayOnlineMenu.IsCalledFromApplyOptions = true;
         }
+    }
+}
+
+[HarmonyPatch(typeof(MainMenuController), "Update")]
+public static class UpdateOnlineStatus
+{
+    static void Postfix(MainMenuController __instance)
+    {
+        ApplyPlayOnlinePatch.IsOnlineOptionSelected = __instance.selection == 2;
     }
 }
 

@@ -151,7 +151,7 @@ public static class SettingsMenuControllerPatches
     private static void CreateLobby(this SettingsMenuController instance)
     {
         CustomLobbyMenu.Instance.StartCoroutine(
-            CustomLobbyMenu.Instance.CreateLobby(memberLimitSelection, isFriendsOnly));
+            CustomLobbyMenu.Instance.TransitionToLobby(memberLimitSelection, isFriendsOnly));
     }
 
     private static void SetMemberLimit(this SettingsMenuController instance, bool left)

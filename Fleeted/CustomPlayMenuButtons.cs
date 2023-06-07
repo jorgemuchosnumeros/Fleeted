@@ -75,8 +75,18 @@ public class CustomPlayMenuButtons : MonoBehaviour
         eyeRectIcon.sizeDelta = new Vector2(60f, 50f);
     }
 
+    private void Start()
+    {
+        Cursor.visible = true;
+    }
+
     private void Update()
     {
+        if (GlobalController.globalController.screen != GlobalController.screens.playmenu)
+        {
+            Destroy(gameObject);
+        }
+
         copyBg.transform.position = _renderCamera.WorldToScreenPoint(new Vector3(999.885f, -0.115f, 0));
         eyeBg.transform.position = _renderCamera.WorldToScreenPoint(new Vector3(999.95f, -0.115f, 0));
 
@@ -96,11 +106,13 @@ public class CustomPlayMenuButtons : MonoBehaviour
         CustomLobbyMenu.Instance.canvas.transform.position = Vector3.zero;
         CustomLobbyMenu.Instance.canvas.transform.localScale = Vector3.one * 0.1f;
         CustomLobbyMenu.Instance.canvasCanvas.scaleFactor = 1f;
+        Cursor.visible = false;
     }
+
 
     private void OnCopyClick()
     {
-        var toArrowSymbols = CustomLobbyMenu.Instance.joinArrowCode;
+        var toArrowSymbols = LobbyManager.Instance.joinArrowCode;
         toArrowSymbols = toArrowSymbols.Replace("D", "↓");
         toArrowSymbols = toArrowSymbols.Replace("L", "←");
         toArrowSymbols = toArrowSymbols.Replace("R", "→");
@@ -119,7 +131,7 @@ public class CustomPlayMenuButtons : MonoBehaviour
 
     private void UpdateArrows()
     {
-        var arrows = CustomLobbyMenu.Instance.joinArrowCode;
+        var arrows = LobbyManager.Instance.joinArrowCode;
         int line = 0;
         foreach (var arrow in arrows)
         {

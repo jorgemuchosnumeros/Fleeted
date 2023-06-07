@@ -60,6 +60,7 @@ public static class SteamworksPatches
         }
 #endif
 
-        SteamClient.Init(1037190);
+        if (!SteamClient.IsValid)
+            SteamClient.Init(1037190);
     }
 }
