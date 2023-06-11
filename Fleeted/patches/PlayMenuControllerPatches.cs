@@ -1,0 +1,159 @@
+using System.Reflection;
+using HarmonyLib;
+using UnityEngine;
+
+namespace Fleeted.patches;
+
+[HarmonyPatch(typeof(PlayMenuController), "Update")]
+public class LockMenuOnLoading
+{
+    static bool Prefix()
+    {
+        if (LobbyManager.Instance.isLoadingLock)
+            return false;
+
+        return true;
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "ManageCustomization")]
+public class OnCustomizationSelectionPatch
+{
+    static void Postfix(PlayMenuController __instance, int playerN)
+    {
+        var playerPosesion =
+            typeof(PlayMenuController).GetField("playerPosesion", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        if (((int[]) playerPosesion.GetValue(__instance))[playerN] != 0)
+        {
+            return;
+        }
+
+        if (InputController.inputController.inputs[playerN + "ADown"])
+        {
+            if (__instance.disabledGO[playerN - 1].activeSelf)
+            {
+                return;
+            }
+
+            CustomLobbyMenu.Instance.wasCharaSelected = true;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "ResetPlayer")]
+public class OnResetPlayerPatch
+{
+    static void Postfix()
+    {
+        CustomLobbyMenu.Instance.wasCharaSelected = true;
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "ManageBotCustomization")]
+public class OnBotCustomizationSelectionPatch
+{
+    static void Prefix(PlayMenuController __instance, int playerN)
+    {
+        var playerPosesion =
+            typeof(PlayMenuController).GetField("playerPosesion", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        if (((int[]) playerPosesion.GetValue(__instance))[playerN] == 0)
+        {
+            return;
+        }
+
+        if (InputController.inputController.inputs[playerN + "ADown"])
+        {
+            var alreadySelectedCharas = (bool[]) typeof(PlayMenuController)
+                .GetField("alreadySelectedCharas", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(__instance);
+
+            var charaSelection = (int[]) typeof(PlayMenuController)
+                .GetField("charaSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(__instance);
+
+            if (alreadySelectedCharas[charaSelection[((int[]) playerPosesion.GetValue(__instance))[playerN] - 1] - 1])
+            {
+                return;
+            }
+
+            CustomLobbyMenu.Instance.wasCharaSelected = true;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "RemoveBot")]
+public class OnRemoveBotPatch
+{
+    static void Postfix()
+    {
+        CustomLobbyMenu.Instance.wasCharaSelected = true;
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "UpdateBotLabel")]
+public class GreyOutAddBotButtonIfNotHostPatch
+{
+    static bool Prefix(PlayMenuController __instance)
+    {
+        if (!LobbyManager.Instance.hostOptions)
+        {
+            GreyOutLabel(__instance);
+            return false;
+        }
+
+        return true;
+    }
+
+    static void GreyOutLabel(PlayMenuController __instance)
+    {
+        var addBot = typeof(PlayMenuController).GetField("addBot", BindingFlags.Instance | BindingFlags.NonPublic);
+        var disabledColor =
+            typeof(PlayMenuController).GetField("disabledColor", BindingFlags.Instance | BindingFlags.NonPublic);
+        if ((bool) addBot.GetValue(__instance))
+        {
+            __instance.botToggleLabel.text = "< + >";
+            __instance.botToggleLabel.color = (Color32) disabledColor.GetValue(__instance);
+        }
+        else
+        {
+            __instance.botToggleLabel.text = "< - >";
+            __instance.botToggleLabel.color = (Color32) disabledColor.GetValue(__instance);
+        }
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "AddBot")]
+public class DisableAddBotButtonIfNotHostPatch
+{
+    static bool Prefix(PlayMenuController __instance)
+    {
+        if (!LobbyManager.Instance.hostOptions)
+        {
+            DisableButton(__instance);
+            return false;
+        }
+
+        return true;
+    }
+
+    static void DisableButton(PlayMenuController __instance)
+    {
+        var disabledColor =
+            typeof(PlayMenuController).GetField("disabledColor", BindingFlags.Instance | BindingFlags.NonPublic);
+        __instance.botToggleLabel.color = (Color32) disabledColor.GetValue(__instance);
+
+        GlobalAudio.globalAudio.PlayInvalid();
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "ManageBotCustomization")]
+public class ManageBotCustomizationPatch
+{
+    public static int PlayerPosesion;
+
+    static void Prefix(PlayMenuController __instance, int playerN)
+    {
+    }
+}

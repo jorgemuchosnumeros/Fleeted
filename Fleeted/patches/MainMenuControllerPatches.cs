@@ -28,7 +28,7 @@ public static class UpdateOnlineStatus
 }
 
 [HarmonyPatch(typeof(MainMenuController), "BackFromPlayMenu")]
-public class PlayMenuControllerPatches
+public class PlayButtonMenuControllerPatches
 {
     static void Postfix(MainMenuController __instance)
     {

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using Fleeted.utils;
+using Steamworks;
 using TMPro;
 using UnityEngine;
 
@@ -14,6 +15,7 @@ public class CustomLobbyMenu : MonoBehaviour
     public GameObject info;
     public GameObject miniMenu;
     public GameObject playMenuButtons;
+    public GameObject[] playerBoxes = new GameObject[8];
 
     public Canvas canvasCanvas;
     public TextMeshProUGUI infoTMP;
@@ -22,6 +24,8 @@ public class CustomLobbyMenu : MonoBehaviour
     public Sprite copySprite;
     public Sprite eyeSprite;
     public Sprite pointSprite;
+    public PlayMenuController playMenuController;
+    public bool wasCharaSelected;
     private MMContainersController _mmContainersController;
 
     private Color _prevInfoColor;
@@ -43,8 +47,13 @@ public class CustomLobbyMenu : MonoBehaviour
         info = GameObject.Find("PlayMenu/Canvas/Info");
         miniMenu = GameObject.Find("PlayMenu/Canvas/MiniMenu");
 
+        playerBoxes[0] = GameObject.Find("PlayMenu/PlayerBox");
+        for (int i = 1; i < 8; i++)
+            playerBoxes[i] = GameObject.Find($"PlayMenu/PlayerBox ({i})");
+
         canvasCanvas = canvas.GetComponent<Canvas>();
         infoTMP = info.GetComponent<TextMeshProUGUI>();
+        playMenuController = FindObjectOfType<PlayMenuController>();
         _mmContainersController = FindObjectOfType<MMContainersController>();
     }
 
@@ -57,7 +66,7 @@ public class CustomLobbyMenu : MonoBehaviour
     public void ShowPlayMenuButtons()
     {
         playMenuButtons = new GameObject("Custom Play Menu Buttons");
-        playMenuButtons.transform.SetParent(miniMenu.transform, false);
+        playMenuButtons.transform.SetParent(info.transform, false);
         playMenuButtons.AddComponent<CustomPlayMenuButtons>();
     }
 
@@ -65,6 +74,7 @@ public class CustomLobbyMenu : MonoBehaviour
     {
         LobbyManager.Instance.CurrentLobby.Leave();
         LobbyManager.Instance.isHost = false;
+        LobbyManager.Instance.hostOptions = true;
 
         infoTMP.text = _prevInfoText;
         infoTMP.color = _prevInfoColor;
@@ -89,6 +99,39 @@ public class CustomLobbyMenu : MonoBehaviour
 
         CustomOnlineMenu.Instance.ForceHideMenu(false);
         CustomMainMenu.Instance.ForceHideMenu(false);
+    }
+
+    public void ChangeToSteamNames()
+    {
+        var players = LobbyManager.Instance.Players;
+        for (var i = 0; i < players.Count; i++)
+        {
+            if (playerBoxes[i].activeSelf == false) continue;
+
+            var playerBox = playerBoxes[i];
+            var playerName = new Friend(players[i].OwnerOfCharaId).Name;
+            var charaName = playerBox.transform.GetChild(4).GetChild(0);
+            var tmpugui = charaName.GetComponent<TextMeshProUGUI>();
+            var rectTransform = charaName.GetComponent<RectTransform>();
+
+            float adjustx;
+            float adjusty;
+
+            if (players[i].IsBot)
+            {
+                adjustx = 0f;
+                adjusty = 0f;
+            }
+            else
+            {
+                adjustx = 90f;
+                adjusty = 8f;
+                tmpugui.text = playerName;
+            }
+
+            rectTransform.sizeDelta = new Vector2(150 + adjustx, 30);
+            rectTransform.anchoredPosition = new Vector2(53.8f - adjustx / 2, 68.8f + adjusty);
+        }
     }
 
     public IEnumerator TransitionToLobby(ulong id)
