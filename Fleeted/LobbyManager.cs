@@ -37,17 +37,18 @@ public class LobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyCreated += OnLobbyCreated;
         SteamMatchmaking.OnLobbyEntered += OnLobbyEntered;
         SteamMatchmaking.OnLobbyDataChanged += OnLobbyDataChanged;
+        SteamMatchmaking.OnLobbyMemberDataChanged += OnLobbyMemberDataChanged;
     }
 
     private void Update()
     {
         if (!CustomLobbyMenu.Instance.wasCharaSelected) return;
 
-        SendOwnCharaSelection();
+        SendOwnCharaSelection(isHost);
         CustomLobbyMenu.Instance.ChangeToSteamNames();
     }
 
-    private void SendOwnCharaSelection()
+    private void SendOwnCharaSelection(bool asHost)
     {
         var charas = String.Empty;
 
@@ -57,7 +58,7 @@ public class LobbyManager : MonoBehaviour
 
             if (!playerBox.activeSelf)
             {
-                if (Players.ContainsKey(i))
+                if (Players.ContainsKey(i) && isHost)
                 {
                     Players.Remove(i);
                     CurrentLobby.SetData($"Slot{i}", String.Empty);
@@ -99,7 +100,10 @@ public class LobbyManager : MonoBehaviour
                 $"slot {i}, owner: {Players[i].OwnerOfCharaId}, chara: {Players[i].Chara}, isBot: {Players[i].IsBot}\n";
             var playerInfoJson = JsonUtility.ToJson(Players[i]);
 
-            CurrentLobby.SetData($"Slot{i}", playerInfoJson);
+            if (asHost)
+                CurrentLobby.SetData($"Slot{i}", playerInfoJson);
+            else
+                CurrentLobby.SetMemberData($"Slot{i}", playerInfoJson);
         }
 
         Plugin.Logger.LogInfo($"\n{charas}");
@@ -118,7 +122,10 @@ public class LobbyManager : MonoBehaviour
             {
                 if (Players.ContainsKey(i) && !isHost)
                 {
-                    RemoveForeignChara(i);
+                    if (Players[i].OwnerOfCharaId == SteamClient.SteamId)
+                        SendOwnCharaSelection(false);
+                    else
+                        RemoveForeignChara(i);
                 }
 
                 continue;
@@ -150,18 +157,42 @@ public class LobbyManager : MonoBehaviour
 
     private void AddForeignChara(int slot, PlayerInfo player)
     {
-        var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
-        var playerPosesion = player.IsBot ? 0 : slot;
-        var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
-
         Players[slot] = player;
 
+        var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
+        var icInstance = InputController.inputController;
+        var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
+
         playerBox.SetActive(true);
-        pmcInstance.PlayVoice((int) player.Chara);
         playerBox.transform.GetChild(0).GetComponent<Animator>().SetInteger("state", 2);
         playerBox.transform.GetChild(4).GetChild(2).gameObject.SetActive(value: false);
 
-        //alreadySelectedCharas[charaSelection[playerPosesion[playerN] - 1] - 1] = true;
+        //bots[slot] = player.IsBot;
+        var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpBots = (bool[]) bots.GetValue(icInstance);
+        tmpBots[slot + 1] = true; // Make the game think we added a bot to have the slot occupied
+        bots.SetValue(icInstance, tmpBots);
+
+        InputController.inputController.AssignParse(8);
+
+        //activePlayers[slot] = true;
+        var activePlayers =
+            typeof(PlayMenuController).GetField("activePlayers",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpActivePlayers = (bool[]) activePlayers.GetValue(pmcInstance);
+        tmpActivePlayers[slot] = true;
+        activePlayers.SetValue(pmcInstance, tmpActivePlayers);
+
+        pmcInstance.PlayVoice((int) player.Chara);
+
+        //charaSelection[slot] = player.Chara;
+        var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
+        tmpCharaSelection[slot] = (int) player.Chara;
+        charaSelection.SetValue(pmcInstance, tmpCharaSelection);
+
+        //alreadySelectedCharas[player.Chara] = true;
         var alreadySelectedCharas =
             typeof(PlayMenuController).GetField("alreadySelectedCharas",
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -186,12 +217,21 @@ public class LobbyManager : MonoBehaviour
 
     private void RemoveForeignChara(int slot)
     {
-        Players.Remove(slot);
-
+        var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
         var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
         playerBox.SetActive(false);
 
         GlobalAudio.globalAudio.PlayCancel();
+
+        //alreadySelectedCharas[charaSelection[playerPosesion[playerN] - 1] - 1] = false;
+        var alreadySelectedCharas =
+            typeof(PlayMenuController).GetField("alreadySelectedCharas",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpAlreadySelectedCharas = (bool[]) alreadySelectedCharas.GetValue(pmcInstance);
+        tmpAlreadySelectedCharas[Players[slot].Chara] = false;
+        alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
+
+        Players.Remove(slot);
 
         Plugin.Logger.LogError($"Removing Chara at {slot}");
     }
@@ -265,6 +305,15 @@ public class LobbyManager : MonoBehaviour
         GetForeignCharaSelection(lobby);
     }
 
+    private void OnLobbyMemberDataChanged(Lobby lobby, Friend friend)
+    {
+        if (isHost)
+        {
+            GetForeignCharaSelection(lobby);
+            Plugin.Logger.LogWarning($"Received Update from User: {friend.Id}");
+        }
+    }
+
     public async void JoinByArrows(Arrows[] input)
     {
         joinArrowCode = String.Empty;
@@ -293,6 +342,7 @@ public class LobbyManager : MonoBehaviour
         }
 
         Plugin.Logger.LogInfo($"Joining with code: {joinArrowCode}");
+        ArrowJoinInput.Instance.ClearInput();
         ArrowJoinInput.Instance.isInputLocked = false;
 
 

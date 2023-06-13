@@ -106,7 +106,7 @@ public class ArrowJoinInput : MonoBehaviour
         }
     }
 
-    private void ClearInput()
+    public void ClearInput()
     {
         CustomOnlineMenu.Instance.GalleryTMP.color =
             CustomSettingsMenu.Instance.settingsControllerInstance.enabledColor;

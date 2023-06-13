@@ -148,12 +148,40 @@ public class DisableAddBotButtonIfNotHostPatch
     }
 }
 
-[HarmonyPatch(typeof(PlayMenuController), "ManageBotCustomization")]
-public class ManageBotCustomizationPatch
+[HarmonyPatch(typeof(PlayMenuController), "UpdateDisabledCharas")]
+public class UpdateDisabledCharasPatch
 {
-    public static int PlayerPosesion;
-
-    static void Prefix(PlayMenuController __instance, int playerN)
+    static bool Prefix(PlayMenuController __instance)
     {
+        var charaSelection = (int[]) typeof(PlayMenuController).GetField("charaSelection",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance);
+        var playerState = (int[]) typeof(PlayMenuController).GetField("playerState",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance);
+        var playerPosesion = (int[]) typeof(PlayMenuController).GetField("playerPosesion",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance);
+        var alreadySelectedCharas = (bool[]) typeof(PlayMenuController).GetField("alreadySelectedCharas",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance);
+
+        for (int i = 0; i < charaSelection.Length; i++)
+        {
+            if (playerState[i] != 2 && playerPosesion[i + 1] == 0)
+            {
+                Plugin.Logger.LogInfo(charaSelection[i]);
+                if (alreadySelectedCharas[charaSelection[i]])
+                {
+                    __instance.disabledGO[i].SetActive(value: true);
+                }
+                else
+                {
+                    __instance.disabledGO[i].SetActive(value: false);
+                }
+            }
+        }
+
+        return false;
     }
 }

@@ -109,6 +109,7 @@ public class CustomLobbyMenu : MonoBehaviour
             if (playerBoxes[i].activeSelf == false) continue;
 
             var playerBox = playerBoxes[i];
+
             var playerName = new Friend(players[i].OwnerOfCharaId).Name;
             var charaName = playerBox.transform.GetChild(4).GetChild(0);
             var tmpugui = charaName.GetComponent<TextMeshProUGUI>();

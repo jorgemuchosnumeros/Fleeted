@@ -49,6 +49,9 @@
             <HintPath>libs\netstandard.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <Reference Include="Rewired_Core">
+            <HintPath>libs\Rewired_Core.dll</HintPath>
+        </Reference>
         <Reference Include="System.Net.Http">
             <HintPath>..\..\..\.nuget\packages\microsoft.netframework.referenceassemblies.net46\1.0.3\build\.NETFramework\v4.6\System.Net.Http.dll</HintPath>
         </Reference>
