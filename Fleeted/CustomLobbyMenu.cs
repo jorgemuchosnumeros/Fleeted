@@ -93,7 +93,26 @@ public class CustomLobbyMenu : MonoBehaviour
         typeof(MainMenuController).GetMethod("ApplyPlay", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(CustomMainMenu.Instance.mainMenuController, new object[] { });
 
-        LobbyManager.Instance.CreateLobby(memberLimitSelection, isFriendsOnly);
+        Plugin.Logger.LogInfo($"Create Lobby with limit of {memberLimitSelection} as {isFriendsOnly} FriendsOnly...");
+        StartCoroutine(LobbyManager.Instance.CreateMenu(memberLimitSelection));
+
+        yield return new WaitForSeconds(0.5f);
+
+        CustomOnlineMenu.Instance.ForceHideMenu(false);
+        CustomMainMenu.Instance.ForceHideMenu(false);
+    }
+
+    public IEnumerator TransitionToLobby(ulong id)
+    {
+        _mmContainersController.HideOptions();
+        CustomOnlineMenu.Instance.ForceHideMenu(true);
+        CustomMainMenu.Instance.ForceHideMenu(true);
+
+        typeof(MainMenuController).GetMethod("ApplyPlay", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.Invoke(CustomMainMenu.Instance.mainMenuController, new object[] { });
+
+        Plugin.Logger.LogInfo($"Joining Lobby...");
+        StartCoroutine(LobbyManager.Instance.JoinMenu(id));
 
         yield return new WaitForSeconds(0.5f);
 
@@ -133,22 +152,5 @@ public class CustomLobbyMenu : MonoBehaviour
             rectTransform.sizeDelta = new Vector2(150 + adjustx, 30);
             rectTransform.anchoredPosition = new Vector2(53.8f - adjustx / 2, 68.8f + adjusty);
         }
-    }
-
-    public IEnumerator TransitionToLobby(ulong id)
-    {
-        _mmContainersController.HideOptions();
-        CustomOnlineMenu.Instance.ForceHideMenu(true);
-        CustomMainMenu.Instance.ForceHideMenu(true);
-
-        typeof(MainMenuController).GetMethod("ApplyPlay", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.Invoke(CustomMainMenu.Instance.mainMenuController, new object[] { });
-
-        LobbyManager.Instance.JoinLobby(id);
-
-        yield return new WaitForSeconds(0.5f);
-
-        CustomOnlineMenu.Instance.ForceHideMenu(false);
-        CustomMainMenu.Instance.ForceHideMenu(false);
     }
 }

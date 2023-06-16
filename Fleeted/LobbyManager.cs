@@ -23,8 +23,9 @@ public class LobbyManager : MonoBehaviour
 
     public string joinArrowCode;
     private Result _createLobbyResult = Result.None;
-    public Lobby CurrentLobby;
 
+    public Lobby CurrentLobby;
+    public Friend CurrentLobbyOwner;
     public Dictionary<int, PlayerInfo> Players = new();
 
     private void Awake()
@@ -38,17 +39,19 @@ public class LobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyEntered += OnLobbyEntered;
         SteamMatchmaking.OnLobbyDataChanged += OnLobbyDataChanged;
         SteamMatchmaking.OnLobbyMemberDataChanged += OnLobbyMemberDataChanged;
+        SteamMatchmaking.OnLobbyMemberLeave += OnLobbyMemberLeave;
     }
 
     private void Update()
     {
         if (!CustomLobbyMenu.Instance.wasCharaSelected) return;
 
-        SendOwnCharaSelection(isHost);
+        SendOwnCharaSelection();
+
         CustomLobbyMenu.Instance.ChangeToSteamNames();
     }
 
-    private void SendOwnCharaSelection(bool asHost)
+    private void SendOwnCharaSelection()
     {
         var charas = String.Empty;
 
@@ -56,20 +59,34 @@ public class LobbyManager : MonoBehaviour
         {
             var playerBox = CustomLobbyMenu.Instance.playerBoxes[i];
 
-            if (!playerBox.activeSelf)
+            if (!playerBox.activeSelf) // if we have an empty slot
             {
-                if (Players.ContainsKey(i) && isHost)
+                if (Players.ContainsKey(i)) // but, we still have a key referencing this slot
                 {
                     Players.Remove(i);
-                    CurrentLobby.SetData($"Slot{i}", String.Empty);
+                    if (isHost)
+                        CurrentLobby.SetData($"Slot{i}", String.Empty);
+                    else
+                        CurrentLobby.SetMemberData($"Slot{i}", String.Empty);
+
                     Plugin.Logger.LogInfo($"Removing slot {i}");
                 }
 
                 continue;
             }
 
-            var playerBoxCanvas = playerBox.transform.GetChild(4); // 4 stands for canvas
-            var isBot = playerBoxCanvas.GetChild(1).GetComponent<TextMeshProUGUI>().text.Contains("*");
+            var playerBoxDisable = playerBox.transform.GetChild(1).gameObject;
+
+            if (playerBoxDisable.activeSelf &&
+                Players[i].OwnerOfCharaId != SteamClient.SteamId) // Fix for weird disabled bug
+            {
+                playerBoxDisable.SetActive(false);
+            }
+
+            var playerBoxCanvas = playerBox.transform.GetChild(4);
+
+            // If the Chara has already owner, do not change it, else we are making our own chara
+            var steamId = Players.ContainsKey(i) ? Players[i].OwnerOfCharaId : SteamClient.SteamId.Value;
 
             // weird hack, we dont want to use the names of the TMPUGUI.text cuz those are going to be tampered by other
             // users, we use the SpriteRenderer.sprite.name instead
@@ -87,9 +104,11 @@ public class LobbyManager : MonoBehaviour
                 _ => throw new ArgumentOutOfRangeException()
             };
 
+            var isBot = playerBoxCanvas.GetChild(1).GetComponent<TextMeshProUGUI>().text.Contains("*");
+
             var playerInfo = new PlayerInfo
             {
-                OwnerOfCharaId = SteamClient.SteamId.Value,
+                OwnerOfCharaId = steamId,
                 Chara = chara,
                 IsBot = isBot,
             };
@@ -100,32 +119,39 @@ public class LobbyManager : MonoBehaviour
                 $"slot {i}, owner: {Players[i].OwnerOfCharaId}, chara: {Players[i].Chara}, isBot: {Players[i].IsBot}\n";
             var playerInfoJson = JsonUtility.ToJson(Players[i]);
 
-            if (asHost)
+            if (isHost)
                 CurrentLobby.SetData($"Slot{i}", playerInfoJson);
             else
+            {
                 CurrentLobby.SetMemberData($"Slot{i}", playerInfoJson);
+            }
         }
 
         Plugin.Logger.LogInfo($"\n{charas}");
         CustomLobbyMenu.Instance.wasCharaSelected = false;
     }
 
-    private void GetForeignCharaSelection(Lobby lobby)
+    private void GetCharaSelection(Lobby lobby, ulong friend = 0)
     {
         var charas = String.Empty;
 
         for (int i = 0; i < 8; i++)
         {
-            var playerInfoJson = lobby.GetData($"Slot{i}");
+            string playerInfoJson;
+            if (isHost && friend != 0)
+                playerInfoJson = lobby.GetMemberData(new Friend(friend), $"Slot{i}");
+            else
+                playerInfoJson = lobby.GetData($"Slot{i}");
 
-            if (playerInfoJson == string.Empty)
+            if (playerInfoJson == string.Empty) // if key is empty
             {
-                if (Players.ContainsKey(i) && !isHost)
+                if (!Players.ContainsKey(i)) continue;
+
+                if (Players[i].OwnerOfCharaId != SteamClient.SteamId) // and it isn't our chara
                 {
-                    if (Players[i].OwnerOfCharaId == SteamClient.SteamId)
-                        SendOwnCharaSelection(false);
-                    else
-                        RemoveForeignChara(i);
+                    RemoveForeignChara(i);
+                    if (isHost)
+                        CurrentLobby.SetData($"Slot{i}", String.Empty);
                 }
 
                 continue;
@@ -137,9 +163,15 @@ public class LobbyManager : MonoBehaviour
 
             try
             {
-                if (!Players.ContainsValue(player) && !isHost)
+                if (!Players.ContainsValue(player))
                 {
-                    AddForeignChara(i, player);
+                    if (player.OwnerOfCharaId == SteamClient.SteamId)
+                        Players.Remove(i);
+                    else
+                        AddForeignChara(i, player);
+
+                    if (isHost)
+                        SendOwnCharaSelection();
                 }
             }
             catch (Exception ex) // For some reason unity does not catch exceptions from this function
@@ -167,10 +199,10 @@ public class LobbyManager : MonoBehaviour
         playerBox.transform.GetChild(0).GetComponent<Animator>().SetInteger("state", 2);
         playerBox.transform.GetChild(4).GetChild(2).gameObject.SetActive(value: false);
 
-        //bots[slot] = player.IsBot;
+        //bots[slot] = true;
         var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
         var tmpBots = (bool[]) bots.GetValue(icInstance);
-        tmpBots[slot + 1] = true; // Make the game think we added a bot to have the slot occupied
+        tmpBots[slot == 0 ? 0 : slot + 1] = true; // Make the game think we added a bot to have the slot occupied
         bots.SetValue(icInstance, tmpBots);
 
         InputController.inputController.AssignParse(8);
@@ -218,10 +250,24 @@ public class LobbyManager : MonoBehaviour
     private void RemoveForeignChara(int slot)
     {
         var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
+        var icInstance = InputController.inputController;
         var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
         playerBox.SetActive(false);
 
         GlobalAudio.globalAudio.PlayCancel();
+
+        //bots[slot] = player.IsBot;
+        var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpBots = (bool[]) bots.GetValue(icInstance);
+        tmpBots[slot == 0 ? 0 : slot + 1] = false; // Make the game think we removed a bot to have the slot unoccupied
+        bots.SetValue(icInstance, tmpBots);
+
+        //charaSelection[slot] = -1;
+        var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
+        tmpCharaSelection[slot] = -1;
+        charaSelection.SetValue(pmcInstance, tmpCharaSelection);
 
         //alreadySelectedCharas[charaSelection[playerPosesion[playerN] - 1] - 1] = false;
         var alreadySelectedCharas =
@@ -294,6 +340,8 @@ public class LobbyManager : MonoBehaviour
         }
 
         CurrentLobby = lobby;
+        CurrentLobbyOwner = lobby.Owner;
+
         CustomLobbyMenu.Instance.ShowPlayMenuButtons();
 
         Plugin.Logger.LogInfo($"Joined Lobby: {lobby.Id}");
@@ -302,15 +350,41 @@ public class LobbyManager : MonoBehaviour
 
     private void OnLobbyDataChanged(Lobby lobby)
     {
-        GetForeignCharaSelection(lobby);
+        if (!isHost)
+            GetCharaSelection(lobby);
     }
 
     private void OnLobbyMemberDataChanged(Lobby lobby, Friend friend)
     {
         if (isHost)
+            GetCharaSelection(lobby, friend.Id.Value);
+    }
+
+    private void OnLobbyMemberLeave(Lobby lobby, Friend friend)
+    {
+        if (CurrentLobbyOwner.Equals(friend) && !isHost)
         {
-            GetForeignCharaSelection(lobby);
-            Plugin.Logger.LogWarning($"Received Update from User: {friend.Id}");
+            CurrentLobbyOwner = new Friend();
+
+            //PlayMenuController.BackToMainmenu()
+            typeof(PlayMenuController).GetMethod("BackToMainmenu", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(PlayMenuController.playMenuController, new object[] { });
+
+            //PlayMenuController.PlayCancel();
+            typeof(PlayMenuController).GetMethod("PlayCancel", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(PlayMenuController.playMenuController, new object[] { });
+        }
+        else
+        {
+            for (var i = 0; i < Players.Count + 1; i++)
+            {
+                if (!Players[i].OwnerOfCharaId.Equals(friend.Id)) continue;
+
+                RemoveForeignChara(i);
+
+                if (isHost)
+                    CurrentLobby.SetData($"Slot{i}", String.Empty);
+            }
         }
     }
 
@@ -359,19 +433,7 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    public void CreateLobby(int memberLimitSelection, bool isFriendsOnly)
-    {
-        Plugin.Logger.LogInfo($"Create Lobby with limit of {memberLimitSelection} as {isFriendsOnly} FriendsOnly...");
-        StartCoroutine(CreateMenu(memberLimitSelection));
-    }
-
-    public void JoinLobby(ulong id)
-    {
-        Plugin.Logger.LogInfo($"Joining Lobby...");
-        StartCoroutine(JoinMenu(id));
-    }
-
-    private IEnumerator CreateMenu(int maxMembers)
+    public IEnumerator CreateMenu(int maxMembers)
     {
         CustomLobbyMenu.Instance.infoTMP.text = "Creating Lobby...";
 
@@ -381,7 +443,7 @@ public class LobbyManager : MonoBehaviour
         SteamMatchmaking.CreateLobbyAsync(maxMembers);
     }
 
-    private IEnumerator JoinMenu(ulong id)
+    public IEnumerator JoinMenu(ulong id)
     {
         CustomLobbyMenu.Instance.infoTMP.text = "Joining Lobby...";
 

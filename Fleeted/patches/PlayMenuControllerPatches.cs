@@ -170,8 +170,8 @@ public class UpdateDisabledCharasPatch
         {
             if (playerState[i] != 2 && playerPosesion[i + 1] == 0)
             {
-                Plugin.Logger.LogInfo(charaSelection[i]);
-                if (alreadySelectedCharas[charaSelection[i]])
+                if (alreadySelectedCharas
+                        [charaSelection[i] + 1]) // TODO: Still dont know how these private lists work (alreadySelectedCharas[charaSelection[i] - 1])
                 {
                     __instance.disabledGO[i].SetActive(value: true);
                 }
