@@ -135,7 +135,7 @@ public class LobbyManager : MonoBehaviour
     {
         var charas = String.Empty;
 
-        for (int i = 0; i < 8; i++)
+        for (var i = 0; i < 8; i++)
         {
             string playerInfoJson;
             if (isHost && friend != 0)
@@ -205,7 +205,9 @@ public class LobbyManager : MonoBehaviour
         tmpBots[slot == 0 ? 0 : slot + 1] = true; // Make the game think we added a bot to have the slot occupied
         bots.SetValue(icInstance, tmpBots);
 
-        InputController.inputController.AssignParse(8);
+        InputController.inputController.AssignParse(8); // Still dont know how parsing works here but
+        // this number seems to do fine when representing
+        // a net player
 
         //activePlayers[slot] = true;
         var activePlayers =
@@ -256,11 +258,16 @@ public class LobbyManager : MonoBehaviour
 
         GlobalAudio.globalAudio.PlayCancel();
 
-        //bots[slot] = player.IsBot;
+        //bots[slot] = false;
         var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
         var tmpBots = (bool[]) bots.GetValue(icInstance);
         tmpBots[slot == 0 ? 0 : slot + 1] = false; // Make the game think we removed a bot to have the slot unoccupied
         bots.SetValue(icInstance, tmpBots);
+
+        foreach (var bot in tmpBots)
+        {
+            Plugin.Logger.LogWarning($"\n{bot}\n");
+        }
 
         //charaSelection[slot] = -1;
         var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
@@ -335,8 +342,24 @@ public class LobbyManager : MonoBehaviour
         }
         else
         {
-            CustomLobbyMenu.Instance.infoTMP.text = $"Joined {lobby.Owner.Name}'s lobby";
             hostOptions = false;
+            if (lobby.MemberCount > lobby.MaxMembers)
+            {
+                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask Host to raise member limit";
+                CustomLobbyMenu.Instance.infoTMP.color = Color.red;
+                lobby.Leave();
+                return;
+            }
+
+            if (OccupiedSlotsInPlayMenu(lobby) >= 8)
+            {
+                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask Host to remove bots";
+                CustomLobbyMenu.Instance.infoTMP.color = Color.red;
+                lobby.Leave();
+                return;
+            }
+
+            CustomLobbyMenu.Instance.infoTMP.text = $"Joined {lobby.Owner.Name}'s lobby";
         }
 
         CurrentLobby = lobby;
@@ -346,6 +369,18 @@ public class LobbyManager : MonoBehaviour
 
         Plugin.Logger.LogInfo($"Joined Lobby: {lobby.Id}");
         Plugin.Logger.LogInfo($"Owner: {lobby.Owner.Name}");
+    }
+
+    private static int OccupiedSlotsInPlayMenu(Lobby lobby)
+    {
+        var j = 0;
+        for (var i = 0; i < 8; i++)
+        {
+            if (lobby.GetData($"Slot{i}") == String.Empty) continue;
+            j++;
+        }
+
+        return j;
     }
 
     private void OnLobbyDataChanged(Lobby lobby)

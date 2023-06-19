@@ -185,3 +185,48 @@ public class UpdateDisabledCharasPatch
         return false;
     }
 }
+
+[HarmonyPatch(typeof(PlayMenuController), "ManageMinimenuState")]
+public static class ManageMinimenuStatePatch
+{
+    static void Postfix(PlayMenuController __instance)
+    {
+        int num = 0;
+        int num2 = 0;
+
+        var playerState = (int[]) typeof(PlayMenuController)
+            .GetField("playerState", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance);
+
+        for (var i = 1; i < 9; i++)
+        {
+            if (playerState[i - 1] == 1)
+            {
+                num++;
+            }
+            else if (playerState[i - 1] == 2)
+            {
+                num2++;
+            }
+        }
+
+        var disabledColor = (Color32) typeof(PlayMenuController)
+            .GetField("disabledColor", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance)!;
+        var originalStartLabelColor = (Color32) typeof(PlayMenuController)
+            .GetField("originalStartLabelColor", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(__instance)!;
+        var readyToStart = typeof(PlayMenuController)
+            .GetField("readyToStart", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        if (!LobbyManager.Instance.isHost)
+        {
+            __instance.startLabel.color = disabledColor;
+            readyToStart.SetValue(__instance, false);
+        }
+        else
+        {
+            __instance.startLabel.color = originalStartLabelColor;
+            readyToStart.SetValue(__instance, true);
+        }
+    }
+}
