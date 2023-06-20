@@ -22,11 +22,13 @@ public class LobbyManager : MonoBehaviour
     public bool hostOptions = true;
 
     public string joinArrowCode;
+
+    public readonly Dictionary<int, PlayerInfo> Players = new();
     private Result _createLobbyResult = Result.None;
 
     public Lobby CurrentLobby;
     public Friend CurrentLobbyOwner;
-    public Dictionary<int, PlayerInfo> Players = new();
+    public GameSettings Settings;
 
     private void Awake()
     {
@@ -44,11 +46,20 @@ public class LobbyManager : MonoBehaviour
 
     private void Update()
     {
-        if (!CustomLobbyMenu.Instance.wasCharaSelected) return;
+        if (CustomLobbyMenu.Instance.wasCharaSelected)
+        {
+            SendOwnCharaSelection();
+            CustomLobbyMenu.Instance.ChangeToSteamNames();
 
-        SendOwnCharaSelection();
+            CustomLobbyMenu.Instance.wasCharaSelected = false;
+        }
 
-        CustomLobbyMenu.Instance.ChangeToSteamNames();
+        if (CustomLobbyMenu.Instance.wasStageSettingsSelected && isHost)
+        {
+            SendOwnStageSettings();
+
+            CustomLobbyMenu.Instance.wasStageSettingsSelected = false;
+        }
     }
 
     private void SendOwnCharaSelection()
@@ -128,7 +139,59 @@ public class LobbyManager : MonoBehaviour
         }
 
         Plugin.Logger.LogInfo($"\n{charas}");
-        CustomLobbyMenu.Instance.wasCharaSelected = false;
+    }
+
+    private void SendOwnStageSettings()
+    {
+        var smcInstance = FindObjectOfType<StageMenuController>();
+
+        var modeSelection = (int) typeof(StageMenuController)
+            .GetField("modeSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(smcInstance)!;
+
+        var gameMode = modeSelection switch
+        {
+            1 => GameMode.Cruise,
+            2 => GameMode.Chase,
+            3 => GameMode.Race,
+            4 => GameMode.Yincana,
+            5 => GameMode.Sumo,
+            6 => GameMode.Mix,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
+        var stageSelection = (int) typeof(StageMenuController)
+            .GetField("stageSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(smcInstance)!;
+
+        var gameStage = stageSelection switch
+        {
+            1 => GameStage.Norama,
+            2 => GameStage.Tirimo,
+            3 => GameStage.Linera,
+            4 => GameStage.Batali,
+            5 => GameStage.Mix,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
+        var gamePoints = (int) typeof(StageMenuController)
+            .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(smcInstance)!;
+
+        Settings = new GameSettings()
+        {
+            Mode = gameMode,
+            Stage = gameStage,
+            Points = gamePoints,
+            Seed = (int) DateTime.Now.Ticks,
+        };
+
+        var settingsJson = JsonUtility.ToJson(Settings);
+
+        CurrentLobby.SetData("GameSettings", settingsJson);
+
+        Plugin.Logger.LogWarning(
+            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, Seed: {Settings.Seed}");
     }
 
     private void GetCharaSelection(Lobby lobby, ulong friend = 0)
@@ -185,6 +248,32 @@ public class LobbyManager : MonoBehaviour
         {
             Plugin.Logger.LogInfo($"Received Chara Update:\n{charas}");
         }
+    }
+
+    private void GetStageSettings(Lobby lobby)
+    {
+        var smcInstance = FindObjectOfType<StageMenuController>();
+
+        var settingsJson = lobby.GetData("GameSettings");
+        Settings = JsonUtility.FromJson<GameSettings>(settingsJson);
+
+        //modeSelection = Settings.Mode;
+        typeof(StageMenuController)
+            .GetField("modeSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(smcInstance, Settings.Mode);
+
+        //stageSelection = Settings.Stage;
+        typeof(StageMenuController)
+            .GetField("stageSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(smcInstance, Settings.Stage);
+
+        //modeSelection = Settings.Points;
+        typeof(StageMenuController)
+            .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(smcInstance, Settings.Points);
+
+        Plugin.Logger.LogWarning(
+            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, Seed: {Settings.Seed}");
     }
 
     private void AddForeignChara(int slot, PlayerInfo player)
@@ -365,13 +454,13 @@ public class LobbyManager : MonoBehaviour
         CurrentLobby = lobby;
         CurrentLobbyOwner = lobby.Owner;
 
-        CustomLobbyMenu.Instance.ShowPlayMenuButtons();
+        StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0f));
 
         Plugin.Logger.LogInfo($"Joined Lobby: {lobby.Id}");
         Plugin.Logger.LogInfo($"Owner: {lobby.Owner.Name}");
     }
 
-    private static int OccupiedSlotsInPlayMenu(Lobby lobby)
+    public static int OccupiedSlotsInPlayMenu(Lobby lobby)
     {
         var j = 0;
         for (var i = 0; i < 8; i++)
@@ -385,14 +474,15 @@ public class LobbyManager : MonoBehaviour
 
     private void OnLobbyDataChanged(Lobby lobby)
     {
-        if (!isHost)
-            GetCharaSelection(lobby);
+        if (isHost) return;
+        GetCharaSelection(lobby);
+        GetStageSettings(lobby);
     }
 
     private void OnLobbyMemberDataChanged(Lobby lobby, Friend friend)
     {
-        if (isHost)
-            GetCharaSelection(lobby, friend.Id.Value);
+        if (!isHost) return;
+        GetCharaSelection(lobby, friend.Id.Value);
     }
 
     private void OnLobbyMemberLeave(Lobby lobby, Friend friend)
@@ -493,5 +583,13 @@ public class LobbyManager : MonoBehaviour
         public ulong OwnerOfCharaId;
         public uint Chara;
         public bool IsBot;
+    }
+
+    public struct GameSettings
+    {
+        public GameMode Mode;
+        public GameStage Stage;
+        public int Points;
+        public int Seed;
     }
 }

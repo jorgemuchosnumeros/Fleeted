@@ -26,6 +26,7 @@ public class CustomLobbyMenu : MonoBehaviour
     public Sprite pointSprite;
     public PlayMenuController playMenuController;
     public bool wasCharaSelected;
+    public bool wasStageSettingsSelected;
     private MMContainersController _mmContainersController;
 
     private Color _prevInfoColor;
@@ -63,11 +64,19 @@ public class CustomLobbyMenu : MonoBehaviour
         _prevInfoColor = infoTMP.color;
     }
 
-    public void ShowPlayMenuButtons()
+    public IEnumerator ShowPlayMenuButtons(float delay)
     {
         playMenuButtons = new GameObject("Custom Play Menu Buttons");
         playMenuButtons.transform.SetParent(info.transform, false);
         playMenuButtons.AddComponent<CustomPlayMenuButtons>();
+
+        yield return new WaitForSeconds(delay);
+
+        if (delay <= 0) yield break;
+
+        // Reset to leave a chance to the CustomPlayMenuButtons script be ran again
+        info.SetActive(true);
+        info.SetActive(false);
     }
 
     public void HideLobbyMenu()

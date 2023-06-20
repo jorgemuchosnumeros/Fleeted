@@ -218,15 +218,16 @@ public static class ManageMinimenuStatePatch
         var readyToStart = typeof(PlayMenuController)
             .GetField("readyToStart", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        if (!LobbyManager.Instance.isHost)
-        {
-            __instance.startLabel.color = disabledColor;
-            readyToStart.SetValue(__instance, false);
-        }
-        else
+        if (LobbyManager.Instance.isHost &&
+            LobbyManager.OccupiedSlotsInPlayMenu(LobbyManager.Instance.CurrentLobby) >= 2)
         {
             __instance.startLabel.color = originalStartLabelColor;
             readyToStart.SetValue(__instance, true);
+        }
+        else
+        {
+            __instance.startLabel.color = disabledColor;
+            readyToStart.SetValue(__instance, false);
         }
     }
 }
