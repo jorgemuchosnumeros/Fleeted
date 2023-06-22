@@ -47,3 +47,13 @@ public static class OnInitializePatch
         CustomLobbyMenu.Instance.wasStageSettingsSelected = true;
     }
 }
+
+[HarmonyPatch(typeof(StageMenuController), "StartGame")]
+public static class OnStartGamePatch
+{
+    static void Postfix()
+    {
+        if (LobbyManager.Instance.isHost)
+            LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
+    }
+}

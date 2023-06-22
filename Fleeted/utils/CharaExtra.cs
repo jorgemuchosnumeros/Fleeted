@@ -8,15 +8,15 @@ public static class CharaExtra
     {
         return player.Chara switch
         {
-            0u => "Tofe",
-            1u => "Nobu",
-            2u => "Taka",
-            3u => "Waba",
-            4u => "Miki",
-            5u => "Lico",
-            6u => "Naru",
-            7u => "Pita",
-            8u => "Lari",
+            0 => "Tofe",
+            1 => "Nobu",
+            2 => "Taka",
+            3 => "Waba",
+            4 => "Miki",
+            5 => "Lico",
+            6 => "Naru",
+            7 => "Pita",
+            8 => "Lari",
             _ => throw new ArgumentOutOfRangeException()
         };
     }

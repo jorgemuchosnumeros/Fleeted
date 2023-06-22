@@ -189,8 +189,10 @@ public class UpdateDisabledCharasPatch
 [HarmonyPatch(typeof(PlayMenuController), "ManageMinimenuState")]
 public static class ManageMinimenuStatePatch
 {
-    static void Postfix(PlayMenuController __instance)
+    static bool Prefix(PlayMenuController __instance)
     {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+
         int num = 0;
         int num2 = 0;
 
@@ -229,5 +231,7 @@ public static class ManageMinimenuStatePatch
             __instance.startLabel.color = disabledColor;
             readyToStart.SetValue(__instance, false);
         }
+
+        return false;
     }
 }

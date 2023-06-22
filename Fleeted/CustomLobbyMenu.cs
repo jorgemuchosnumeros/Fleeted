@@ -120,7 +120,7 @@ public class CustomLobbyMenu : MonoBehaviour
         typeof(MainMenuController).GetMethod("ApplyPlay", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(CustomMainMenu.Instance.mainMenuController, new object[] { });
 
-        Plugin.Logger.LogInfo($"Joining Lobby...");
+        Plugin.Logger.LogInfo("Joining Lobby...");
         StartCoroutine(LobbyManager.Instance.JoinMenu(id));
 
         yield return new WaitForSeconds(0.5f);

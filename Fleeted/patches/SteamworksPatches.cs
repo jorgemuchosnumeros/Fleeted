@@ -4,6 +4,7 @@ using System;
 using System.Reflection;
 using HarmonyLib;
 using Steamworks;
+using Object = UnityEngine.Object;
 
 namespace Fleeted.patches;
 
@@ -29,7 +30,7 @@ public static class SteamworksPatches
 
         if ((SteamManager) s_instance.GetValue(__instance) != null)
         {
-            UnityEngine.Object.Destroy(__instance.gameObject);
+            Object.Destroy(__instance.gameObject);
             return;
         }
 

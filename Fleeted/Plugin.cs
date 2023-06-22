@@ -59,6 +59,10 @@ namespace Fleeted
                 var customLobbyMenu = new GameObject("CustomLobbyMenu");
                 customLobbyMenu.AddComponent<CustomLobbyMenu>();
                 DontDestroyOnLoad(customLobbyMenu);
+
+                var inGameNetManager = new GameObject("InGameNetManager");
+                inGameNetManager.AddComponent<InGameNetManager>();
+                DontDestroyOnLoad(inGameNetManager);
             }
         }
 

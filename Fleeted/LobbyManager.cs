@@ -22,6 +22,7 @@ public class LobbyManager : MonoBehaviour
     public bool hostOptions = true;
 
     public string joinArrowCode;
+    public int seed;
 
     public readonly Dictionary<int, PlayerInfo> Players = new();
     private Result _createLobbyResult = Result.None;
@@ -103,15 +104,15 @@ public class LobbyManager : MonoBehaviour
             // users, we use the SpriteRenderer.sprite.name instead
             var chara = playerBox.transform.GetChild(2).GetChild(0).GetComponent<SpriteRenderer>().sprite.name switch
             {
-                "tofe" => 0u,
-                "nobu" => 1u,
-                "taka" => 2u,
-                "waba" => 3u,
-                "miki" => 4u,
-                "lico" => 5u,
-                "naru" => 6u,
-                "pita" => 7u,
-                "lari" => 8u,
+                "tofe" => 0,
+                "nobu" => 1,
+                "taka" => 2,
+                "waba" => 3,
+                "miki" => 4,
+                "lico" => 5,
+                "naru" => 6,
+                "pita" => 7,
+                "lari" => 8,
                 _ => throw new ArgumentOutOfRangeException()
             };
 
@@ -178,7 +179,7 @@ public class LobbyManager : MonoBehaviour
             .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.GetValue(smcInstance)!;
 
-        Settings = new GameSettings()
+        Settings = new GameSettings
         {
             Mode = gameMode,
             Stage = gameStage,
@@ -190,8 +191,10 @@ public class LobbyManager : MonoBehaviour
 
         CurrentLobby.SetData("GameSettings", settingsJson);
 
+        seed = Settings.Seed;
+
         Plugin.Logger.LogWarning(
-            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, Seed: {Settings.Seed}");
+            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, MasterSeed: {Settings.Seed}");
     }
 
     private void GetCharaSelection(Lobby lobby, ulong friend = 0)
@@ -257,23 +260,32 @@ public class LobbyManager : MonoBehaviour
         var settingsJson = lobby.GetData("GameSettings");
         Settings = JsonUtility.FromJson<GameSettings>(settingsJson);
 
-        //modeSelection = Settings.Mode;
-        typeof(StageMenuController)
-            .GetField("modeSelection", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(smcInstance, Settings.Mode);
+        try
+        {
+            //modeSelection = Settings.Mode;
+            typeof(StageMenuController)
+                .GetField("modeSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(smcInstance, Settings.Mode);
 
-        //stageSelection = Settings.Stage;
-        typeof(StageMenuController)
-            .GetField("stageSelection", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(smcInstance, Settings.Stage);
+            //stageSelection = Settings.Stage;
+            typeof(StageMenuController)
+                .GetField("stageSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(smcInstance, Settings.Stage);
 
-        //modeSelection = Settings.Points;
-        typeof(StageMenuController)
-            .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.SetValue(smcInstance, Settings.Points);
+            //pointsSelection = Settings.Points;
+            typeof(StageMenuController)
+                .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(smcInstance, Settings.Points);
+        }
+        catch (Exception)
+        {
+            Plugin.Logger.LogInfo("Receiving a possible Seed Update");
+        }
+
+        seed = Settings.Seed;
 
         Plugin.Logger.LogWarning(
-            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, Seed: {Settings.Seed}");
+            $"Settings:\nMode: {Settings.Mode}, Stage: {Settings.Stage}, Points: {Settings.Points}, MasterSeed: {Settings.Seed}");
     }
 
     private void AddForeignChara(int slot, PlayerInfo player)
@@ -306,13 +318,13 @@ public class LobbyManager : MonoBehaviour
         tmpActivePlayers[slot] = true;
         activePlayers.SetValue(pmcInstance, tmpActivePlayers);
 
-        pmcInstance.PlayVoice((int) player.Chara);
+        pmcInstance.PlayVoice(player.Chara);
 
         //charaSelection[slot] = player.Chara;
         var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
             BindingFlags.Instance | BindingFlags.NonPublic);
         var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
-        tmpCharaSelection[slot] = (int) player.Chara;
+        tmpCharaSelection[slot] = player.Chara;
         charaSelection.SetValue(pmcInstance, tmpCharaSelection);
 
         //alreadySelectedCharas[player.Chara] = true;
@@ -323,10 +335,10 @@ public class LobbyManager : MonoBehaviour
         tmpAlreadySelectedCharas[player.Chara] = true;
         alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
 
-        pmcInstance.ships[slot].SetAsChara((int) player.Chara + 1);
-        pmcInstance.charasSR[slot].sprite = pmcInstance.charas[(int) player.Chara];
-        pmcInstance.charas_sSR[slot].sprite = pmcInstance.charas_s[(int) player.Chara];
-        pmcInstance.disabledCharasSR[slot].sprite = pmcInstance.charas_s[(int) player.Chara];
+        pmcInstance.ships[slot].SetAsChara(player.Chara + 1);
+        pmcInstance.charasSR[slot].sprite = pmcInstance.charas[player.Chara];
+        pmcInstance.charas_sSR[slot].sprite = pmcInstance.charas_s[player.Chara];
+        pmcInstance.disabledCharasSR[slot].sprite = pmcInstance.charas_s[player.Chara];
         pmcInstance.charaNames[slot].text = player.CharaName();
 
         var asterisk = player.IsBot ? "*" : string.Empty;
@@ -477,6 +489,7 @@ public class LobbyManager : MonoBehaviour
         if (isHost) return;
         GetCharaSelection(lobby);
         GetStageSettings(lobby);
+        InGameNetManager.Instance.StartGame(lobby);
     }
 
     private void OnLobbyMemberDataChanged(Lobby lobby, Friend friend)
@@ -546,7 +559,7 @@ public class LobbyManager : MonoBehaviour
 
 
 #if GOLDBERG
-        var body = await WebRequestExtra.GetBodyFromWebRequest($"http://127.0.0.1:3001/getLobby?id=UUDDLR");
+        var body = await WebRequestExtra.GetBodyFromWebRequest("http://127.0.0.1:3001/getLobby?id=UUDDLR");
 #else
         var body =
  await WebRequestExtra.GetBodyFromWebRequest($"https://u.antonioma.com/fleeted/getLobby.php?code={joinArrowCode}");
@@ -578,10 +591,20 @@ public class LobbyManager : MonoBehaviour
         SteamMatchmaking.JoinLobbyAsync(id);
     }
 
+    public void UpdateSeed(Lobby lobby, int newSeed)
+    {
+        var settingsJson = lobby.GetData("GameSettings");
+        var settings = JsonUtility.FromJson<GameSettings>(settingsJson);
+        settings.Seed = newSeed;
+        seed = settings.Seed;
+        settingsJson = JsonUtility.ToJson(settings);
+        lobby.SetData("GameSettings", settingsJson);
+    }
+
     public struct PlayerInfo
     {
         public ulong OwnerOfCharaId;
-        public uint Chara;
+        public int Chara;
         public bool IsBot;
     }
 
