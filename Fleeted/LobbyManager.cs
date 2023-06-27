@@ -65,7 +65,7 @@ public class LobbyManager : MonoBehaviour
 
     private void SendOwnCharaSelection()
     {
-        var charas = String.Empty;
+        var charas = string.Empty;
 
         for (var i = 0; i < 8; i++)
         {
@@ -77,9 +77,9 @@ public class LobbyManager : MonoBehaviour
                 {
                     Players.Remove(i);
                     if (isHost)
-                        CurrentLobby.SetData($"Slot{i}", String.Empty);
+                        CurrentLobby.SetData($"Slot{i}", string.Empty);
                     else
-                        CurrentLobby.SetMemberData($"Slot{i}", String.Empty);
+                        CurrentLobby.SetMemberData($"Slot{i}", string.Empty);
 
                     Plugin.Logger.LogInfo($"Removing slot {i}");
                 }
@@ -199,7 +199,7 @@ public class LobbyManager : MonoBehaviour
 
     private void GetCharaSelection(Lobby lobby, ulong friend = 0)
     {
-        var charas = String.Empty;
+        var charas = string.Empty;
 
         for (var i = 0; i < 8; i++)
         {
@@ -217,7 +217,7 @@ public class LobbyManager : MonoBehaviour
                 {
                     RemoveForeignChara(i);
                     if (isHost)
-                        CurrentLobby.SetData($"Slot{i}", String.Empty);
+                        CurrentLobby.SetData($"Slot{i}", string.Empty);
                 }
 
                 continue;
@@ -247,7 +247,7 @@ public class LobbyManager : MonoBehaviour
             }
         }
 
-        if (charas != String.Empty)
+        if (charas != string.Empty)
         {
             Plugin.Logger.LogInfo($"Received Chara Update:\n{charas}");
         }
@@ -477,7 +477,7 @@ public class LobbyManager : MonoBehaviour
         var j = 0;
         for (var i = 0; i < 8; i++)
         {
-            if (lobby.GetData($"Slot{i}") == String.Empty) continue;
+            if (lobby.GetData($"Slot{i}") == string.Empty) continue;
             j++;
         }
 
@@ -521,14 +521,14 @@ public class LobbyManager : MonoBehaviour
                 RemoveForeignChara(i);
 
                 if (isHost)
-                    CurrentLobby.SetData($"Slot{i}", String.Empty);
+                    CurrentLobby.SetData($"Slot{i}", string.Empty);
             }
         }
     }
 
     public async void JoinByArrows(Arrows[] input)
     {
-        joinArrowCode = String.Empty;
+        joinArrowCode = string.Empty;
         foreach (var arrow in input)
         {
             switch (arrow)
@@ -548,7 +548,7 @@ public class LobbyManager : MonoBehaviour
             }
         }
 
-        if (joinArrowCode == String.Empty)
+        if (joinArrowCode == string.Empty)
         {
             return;
         }

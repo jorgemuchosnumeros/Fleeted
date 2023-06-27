@@ -1,11 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Threading;
 using HarmonyLib;
-using Steamworks.Data;
 using UnityEngine;
 
 namespace Fleeted.patches;
@@ -13,53 +9,22 @@ namespace Fleeted.patches;
 [HarmonyPatch(typeof(GameState), "StartNewRound")]
 public static class StartNewRoundWhenEveryoneReadyPatch
 {
+    public static bool StartingInProgress;
+
     static bool Prefix(GameState __instance)
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
-        GameState.gameState.StartCoroutine(StartNewNetRound(__instance));
+        RemovePauseMenuDuringVictory1.RoundEndWhilePaused = false;
 
+        if (!StartingInProgress)
+            InGameNetManager.Instance.StartCoroutine(
+                InGameNetManager.Instance
+                    .StartNewNetRound(__instance));
         return false;
     }
 
-    private static IEnumerator StartNewNetRound(GameState instance)
+    public static void StartNewRound(GameState instance)
     {
-        // Wait for everyone to be ready and host decides a date to start the Game,
-        // ensuring everyone starts at the same time
-
-        var lobby = LobbyManager.Instance.CurrentLobby;
-
-        lobby.SetMemberData("Ready", "yes");
-
-        while (LobbyManager.Instance.isHost)
-        {
-            Thread.Sleep(500);
-
-            if (!IsEveryoneReady(lobby)) continue;
-
-            lobby.SetData("StartTime",
-                $"{DateTime.Now.Ticks + 30000000L}"); // Give 3 seconds of headstart for the rest to be ready
-            break;
-        }
-
-        yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
-
-        Plugin.Logger.LogInfo($"Current Time: {DateTime.Now.Ticks}");
-        Plugin.Logger.LogInfo($"Everyone is ready, starting at {lobby.GetData("StartTime")}");
-        InGameNetManager.Instance.ConnectingMessage(true);
-
-        yield return new WaitUntil(() => DateTime.Now.Ticks >= long.Parse(lobby.GetData("StartTime")));
-
-        InGameNetManager.Instance.ConnectingMessage(false);
-
-        Plugin.Logger.LogInfo($"Current Time: {DateTime.Now.Ticks}");
-        Plugin.Logger.LogInfo("Starting Round...");
-
-
-        LobbyManager.Instance.CurrentLobby.SetMemberData("Ready", String.Empty);
-
-        if (LobbyManager.Instance.isHost)
-            LobbyManager.Instance.CurrentLobby.SetData("StartTime", String.Empty);
-
         GlobalAudio.globalAudio.exitingGame = false;
 
         //DeactivateNonPlayingShips();
@@ -133,11 +98,6 @@ public static class StartNewRoundWhenEveryoneReadyPatch
 
         MusicController.musicController.PlayMusic();
         instance.onlyBotsLeft = false;
-    }
-
-    private static bool IsEveryoneReady(Lobby lobby)
-    {
-        return lobby.Members.All(member => lobby.GetMemberData(member, "Ready") == "yes");
     }
 }
 
@@ -226,6 +186,88 @@ public static class SetPlayersPatch
                 //shipControllers[j].botController.DeactivateAI();
                 var tmpShipControllers = (ShipController[]) shipControllers.GetValue(instance);
                 tmpShipControllers[j].botController.DeactivateAI();
+            }
+        }
+    }
+}
+
+[HarmonyPatch(typeof(GameState), "Update")]
+public static class KeepGameGoingDuringPause
+{
+    static bool Prefix(GameState __instance)
+    {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+        Update(__instance);
+        return false;
+    }
+
+    static void Update(GameState instance)
+    {
+        if (instance.test)
+        {
+            return;
+        }
+
+        var checkIfSceneLoaded =
+            typeof(GameState).GetField("checkIfSceneLoaded", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var asyncLoad =
+            typeof(GameState).GetField("asyncLoad", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        if ((bool) checkIfSceneLoaded.GetValue(instance) && ((AsyncOperation) asyncLoad.GetValue(instance)).isDone)
+        {
+            //checkIfSceneLoaded = false;
+            checkIfSceneLoaded.SetValue(instance, false);
+            FadeController.fadeController.FadeOut();
+            if (GlobalController.globalController.mode == GlobalController.modes.practice)
+            {
+                instance.SetPractice();
+                return;
+            }
+
+            if (GlobalController.globalController.mode == GlobalController.modes.challenge)
+            {
+                //SetChallenge();
+                typeof(GameState).GetMethod("SetChallenge", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(
+                    instance, null);
+                return;
+            }
+
+            instance.StartNewGame();
+        }
+
+        if ((GlobalController.globalController.screen == GlobalController.screens.game ||
+             GlobalController.globalController.screen == GlobalController.screens.gamepause) &&
+            !instance.avoidEndingDuringUnlock)
+        {
+            if (GlobalController.globalController.mode == GlobalController.modes.survival)
+            {
+                //ManageSurvivalMode();
+                typeof(GameState).GetMethod("ManageSurvivalMode", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(instance, null);
+            }
+            else if (GlobalController.globalController.mode == GlobalController.modes.leader)
+            {
+                //ManageLeaderMode();
+                typeof(GameState).GetMethod("ManageLeaderMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(
+                    instance, null);
+            }
+            else if (GlobalController.globalController.mode == GlobalController.modes.race)
+            {
+                //ManageRaceMode();
+                typeof(GameState).GetMethod("ManageRaceMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(
+                    instance, null);
+            }
+            else if (GlobalController.globalController.mode == GlobalController.modes.yincana)
+            {
+                //ManageYincanaMode();
+                typeof(GameState).GetMethod("ManageYincanaMode", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(instance, null);
+            }
+            else if (GlobalController.globalController.mode == GlobalController.modes.sumo)
+            {
+                // ManageSurvivalMode();
+                typeof(GameState).GetMethod("ManageSurvivalMode", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(instance, null);
             }
         }
     }
