@@ -5,5 +5,5 @@ public enum PacketType
     ShipUpdate,
     Death,
     SpawnProjectile,
-    UpdateProjectile,
+    ProjectileUpdate,
 }

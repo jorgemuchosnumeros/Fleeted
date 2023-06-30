@@ -5,19 +5,45 @@ using UnityEngine;
 
 namespace Fleeted.packets;
 
+internal struct ProtocolConst
+{
+    public const int SegmentBits = 0x7F;
+    public const int ContinueBit = 0x80;
+}
+
 public class ProtocolWriter : BinaryWriter
 {
+    public ProtocolWriter(Stream output) : base(output)
+    {
+    }
+
     public override void Write(int value)
     {
         while (true)
         {
-            if ((value & ~0x7F) == 0)
+            if ((value & ~ProtocolConst.SegmentBits) == 0)
             {
                 Write((byte) value);
                 return;
             }
 
-            Write((byte) ((value & 0x7F) | 0x80));
+            Write((byte) ((value & ProtocolConst.SegmentBits) | ProtocolConst.ContinueBit));
+
+            value >>>= 7;
+        }
+    }
+
+    public override void Write(ulong value)
+    {
+        while (true)
+        {
+            if ((value & ~(ulong) ProtocolConst.SegmentBits) == 0)
+            {
+                Write((byte) value);
+                return;
+            }
+
+            Write((byte) ((value & ProtocolConst.SegmentBits) | ProtocolConst.ContinueBit));
 
             value >>>= 7;
         }
@@ -36,32 +62,24 @@ public class ProtocolWriter : BinaryWriter
         Write(value.z);
     }
 
+    public void Write(Packet value)
+    {
+        Write((int) value.Id);
+        Write(value.SteamId);
+        Write(value.Data.Length);
+        Write(value.Data);
+    }
+
     public void Write(ShipPacket value)
     {
         Write(value.Slot);
-        Write(value.OwnerID);
         Write(value.Position);
         Write(value.Velocity);
         Write(value.Rotation);
-        Write(value.Flags);
-    }
-
-    public void Write(ShipFlagsPacket value)
-    {
-        Write(value.Slot);
-        Write(value.StateVector);
+        Write(value.StickRotation);
     }
 
     public void Write(BulkShipUpdate value)
-    {
-        Write(value.Updates.Count);
-        foreach (var update in value.Updates)
-        {
-            Write(update);
-        }
-    }
-
-    public void Write(BulkShipFlagsUpdate value)
     {
         Write(value.Updates.Count);
         foreach (var update in value.Updates)
@@ -107,13 +125,33 @@ public class ProtocolReader : BinaryReader
         while (true)
         {
             var currentByte = ReadByte();
-            value |= (currentByte & 0x7F) << position;
+            value |= (currentByte & ProtocolConst.SegmentBits) << position;
 
-            if ((currentByte & 0x80) == 0) break;
+            if ((currentByte & ProtocolConst.ContinueBit) == 0) break;
 
             position += 7;
 
             if (position >= 32) throw new ArithmeticException("VarInt is too big");
+        }
+
+        return value;
+    }
+
+    public override ulong ReadUInt64()
+    {
+        var value = 0ul;
+        var position = 0;
+
+        while (true)
+        {
+            var currentByte = ReadByte();
+            value |= (ulong) (currentByte & ProtocolConst.SegmentBits) << position;
+
+            if ((currentByte & ProtocolConst.ContinueBit) == 0) break;
+
+            position += 7;
+
+            if (position >= 64) throw new ArithmeticException("VarULong is too big");
         }
 
         return value;
@@ -138,25 +176,25 @@ public class ProtocolReader : BinaryReader
         };
     }
 
+    public Packet ReadPacket()
+    {
+        return new Packet
+        {
+            Id = (PacketType) ReadInt32(),
+            SteamId = ReadUInt64(),
+            Data = ReadBytes(ReadInt32()),
+        };
+    }
+
     public ShipPacket ReadShipPacket()
     {
         return new ShipPacket
         {
             Slot = ReadInt32(),
-            OwnerID = ReadUInt64(),
             Position = ReadVector2(),
             Velocity = ReadVector2(),
             Rotation = ReadVector3(),
-            Flags = ReadInt32(),
-        };
-    }
-
-    public ShipFlagsPacket ReadShipFlagsPacket()
-    {
-        return new ShipFlagsPacket
-        {
-            Slot = ReadInt32(),
-            StateVector = ReadInt32(),
+            StickRotation = ReadVector3(),
         };
     }
 
@@ -170,21 +208,6 @@ public class ProtocolReader : BinaryReader
         }
 
         return new BulkShipUpdate
-        {
-            Updates = updates,
-        };
-    }
-
-    public BulkShipFlagsUpdate ReadBulkShipFlagsUpdate()
-    {
-        var count = ReadInt32();
-        var updates = new List<ShipFlagsPacket>(count);
-        for (int i = 0; i < count; i++)
-        {
-            updates.Add(ReadShipFlagsPacket());
-        }
-
-        return new BulkShipFlagsUpdate
         {
             Updates = updates,
         };

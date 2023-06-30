@@ -24,11 +24,10 @@ public class LobbyManager : MonoBehaviour
     public string joinArrowCode;
     public int seed;
 
-    public readonly Dictionary<int, PlayerInfo> Players = new();
+    public readonly Dictionary<int, PlayerInfo> Players = new(8);
     private Result _createLobbyResult = Result.None;
 
     public Lobby CurrentLobby;
-    public Friend CurrentLobbyOwner;
     public GameSettings Settings;
 
     private void Awake()
@@ -199,6 +198,8 @@ public class LobbyManager : MonoBehaviour
 
     private void GetCharaSelection(Lobby lobby, ulong friend = 0)
     {
+        if (GlobalController.globalController.screen != GlobalController.screens.playmenu) return;
+
         var charas = string.Empty;
 
         for (var i = 0; i < 8; i++)
@@ -292,98 +293,121 @@ public class LobbyManager : MonoBehaviour
     {
         Players[slot] = player;
 
-        var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
-        var icInstance = InputController.inputController;
-        var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
+        switch (GlobalController.globalController.screen)
+        {
+            case GlobalController.screens.playmenu:
 
-        playerBox.SetActive(true);
-        playerBox.transform.GetChild(0).GetComponent<Animator>().SetInteger("state", 2);
-        playerBox.transform.GetChild(4).GetChild(2).gameObject.SetActive(value: false);
+                var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
+                var icInstance = InputController.inputController;
+                var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
 
-        //bots[slot] = true;
-        var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpBots = (bool[]) bots.GetValue(icInstance);
-        tmpBots[slot == 0 ? 0 : slot + 1] = true; // Make the game think we added a bot to have the slot occupied
-        bots.SetValue(icInstance, tmpBots);
+                playerBox.SetActive(true);
+                playerBox.transform.GetChild(0).GetComponent<Animator>().SetInteger("state", 2);
+                playerBox.transform.GetChild(4).GetChild(2).gameObject.SetActive(value: false);
 
-        InputController.inputController.AssignParse(8); // Still dont know how parsing works here but
-        // this number seems to do fine when representing
-        // a net player
+                //bots[slot] = true;
+                var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpBots = (bool[]) bots.GetValue(icInstance);
+                tmpBots[slot == 0 ? 0 : slot + 1] =
+                    true; // Make the game think we added a bot to have the slot occupied
+                bots.SetValue(icInstance, tmpBots);
 
-        //activePlayers[slot] = true;
-        var activePlayers =
-            typeof(PlayMenuController).GetField("activePlayers",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpActivePlayers = (bool[]) activePlayers.GetValue(pmcInstance);
-        tmpActivePlayers[slot] = true;
-        activePlayers.SetValue(pmcInstance, tmpActivePlayers);
+                InputController.inputController.AssignParse(8); // Still dont know how parsing works here but
+                // this number seems to do fine when representing
+                // a net player
 
-        pmcInstance.PlayVoice(player.Chara);
+                //activePlayers[slot] = true;
+                var activePlayers =
+                    typeof(PlayMenuController).GetField("activePlayers",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpActivePlayers = (bool[]) activePlayers.GetValue(pmcInstance);
+                tmpActivePlayers[slot] = true;
+                activePlayers.SetValue(pmcInstance, tmpActivePlayers);
 
-        //charaSelection[slot] = player.Chara;
-        var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
-        tmpCharaSelection[slot] = player.Chara;
-        charaSelection.SetValue(pmcInstance, tmpCharaSelection);
+                pmcInstance.PlayVoice(player.Chara);
 
-        //alreadySelectedCharas[player.Chara] = true;
-        var alreadySelectedCharas =
-            typeof(PlayMenuController).GetField("alreadySelectedCharas",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpAlreadySelectedCharas = (bool[]) alreadySelectedCharas.GetValue(pmcInstance);
-        tmpAlreadySelectedCharas[player.Chara] = true;
-        alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
+                //charaSelection[slot] = player.Chara;
+                var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
+                tmpCharaSelection[slot] = player.Chara;
+                charaSelection.SetValue(pmcInstance, tmpCharaSelection);
 
-        pmcInstance.ships[slot].SetAsChara(player.Chara + 1);
-        pmcInstance.charasSR[slot].sprite = pmcInstance.charas[player.Chara];
-        pmcInstance.charas_sSR[slot].sprite = pmcInstance.charas_s[player.Chara];
-        pmcInstance.disabledCharasSR[slot].sprite = pmcInstance.charas_s[player.Chara];
-        pmcInstance.charaNames[slot].text = player.CharaName();
+                //alreadySelectedCharas[player.Chara] = true;
+                var alreadySelectedCharas =
+                    typeof(PlayMenuController).GetField("alreadySelectedCharas",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpAlreadySelectedCharas = (bool[]) alreadySelectedCharas.GetValue(pmcInstance);
+                tmpAlreadySelectedCharas[player.Chara] = true;
+                alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
 
-        var asterisk = player.IsBot ? "*" : string.Empty;
-        playerBox.transform.GetChild(4).GetChild(1).GetComponent<TextMeshProUGUI>().text = $"{slot + 1}{asterisk}";
-        playerBox.transform.GetChild(1).gameObject.SetActive(false);
+                pmcInstance.ships[slot].SetAsChara(player.Chara + 1);
+                pmcInstance.charasSR[slot].sprite = pmcInstance.charas[player.Chara];
+                pmcInstance.charas_sSR[slot].sprite = pmcInstance.charas_s[player.Chara];
+                pmcInstance.disabledCharasSR[slot].sprite = pmcInstance.charas_s[player.Chara];
+                pmcInstance.charaNames[slot].text = player.CharaName();
 
-        CustomLobbyMenu.Instance.ChangeToSteamNames();
+                var asterisk = player.IsBot ? "*" : string.Empty;
+                playerBox.transform.GetChild(4).GetChild(1).GetComponent<TextMeshProUGUI>().text =
+                    $"{slot + 1}{asterisk}";
+                playerBox.transform.GetChild(1).gameObject.SetActive(false);
+
+                CustomLobbyMenu.Instance.ChangeToSteamNames();
+
+                break;
+        }
 
         Plugin.Logger.LogWarning($"Adding Chara at {slot} as {player.CharaName()} from {player.OwnerOfCharaId}");
     }
 
-    private void RemoveForeignChara(int slot)
+    public void RemoveForeignChara(int slot)
     {
-        var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
-        var icInstance = InputController.inputController;
-        var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
-        playerBox.SetActive(false);
-
-        GlobalAudio.globalAudio.PlayCancel();
-
-        //bots[slot] = false;
-        var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpBots = (bool[]) bots.GetValue(icInstance);
-        tmpBots[slot == 0 ? 0 : slot + 1] = false; // Make the game think we removed a bot to have the slot unoccupied
-        bots.SetValue(icInstance, tmpBots);
-
-        foreach (var bot in tmpBots)
+        switch (GlobalController.globalController.screen)
         {
-            Plugin.Logger.LogWarning($"\n{bot}\n");
+            case GlobalController.screens.playmenu:
+                var pmcInstance = CustomLobbyMenu.Instance.playMenuController;
+                var icInstance = InputController.inputController;
+                var playerBox = CustomLobbyMenu.Instance.playerBoxes[slot];
+                playerBox.SetActive(false);
+
+                GlobalAudio.globalAudio.PlayCancel();
+
+                //bots[slot] = false;
+                var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpBots = (bool[]) bots.GetValue(icInstance);
+                tmpBots[slot == 0 ? 0 : slot + 1] =
+                    false; // Make the game think we removed a bot to have the slot unoccupied
+                bots.SetValue(icInstance, tmpBots);
+
+                foreach (var bot in tmpBots)
+                {
+                    Plugin.Logger.LogWarning($"\n{bot}\n");
+                }
+
+                //charaSelection[slot] = -1;
+                var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
+                tmpCharaSelection[slot] = -1;
+                charaSelection.SetValue(pmcInstance, tmpCharaSelection);
+
+                //alreadySelectedCharas[charaSelection[playerPosesion[playerN] - 1] - 1] = false;
+                var alreadySelectedCharas =
+                    typeof(PlayMenuController).GetField("alreadySelectedCharas",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                var tmpAlreadySelectedCharas = (bool[]) alreadySelectedCharas.GetValue(pmcInstance);
+                tmpAlreadySelectedCharas[Players[slot].Chara] = false;
+                alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
+                break;
+
+            case GlobalController.screens.game:
+            case GlobalController.screens.gameloading:
+            case GlobalController.screens.gamecountdown:
+            case GlobalController.screens.gamepause:
+            case GlobalController.screens.gameresults:
+                //TODO: Remove Chara Ingame ?
+                break;
         }
-
-        //charaSelection[slot] = -1;
-        var charaSelection = typeof(PlayMenuController).GetField("charaSelection",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpCharaSelection = (int[]) charaSelection.GetValue(pmcInstance);
-        tmpCharaSelection[slot] = -1;
-        charaSelection.SetValue(pmcInstance, tmpCharaSelection);
-
-        //alreadySelectedCharas[charaSelection[playerPosesion[playerN] - 1] - 1] = false;
-        var alreadySelectedCharas =
-            typeof(PlayMenuController).GetField("alreadySelectedCharas",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-        var tmpAlreadySelectedCharas = (bool[]) alreadySelectedCharas.GetValue(pmcInstance);
-        tmpAlreadySelectedCharas[Players[slot].Chara] = false;
-        alreadySelectedCharas.SetValue(pmcInstance, tmpAlreadySelectedCharas);
 
         Players.Remove(slot);
 
@@ -464,7 +488,6 @@ public class LobbyManager : MonoBehaviour
         }
 
         CurrentLobby = lobby;
-        CurrentLobbyOwner = lobby.Owner;
 
         StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0f));
 
@@ -500,10 +523,8 @@ public class LobbyManager : MonoBehaviour
 
     private void OnLobbyMemberLeave(Lobby lobby, Friend friend)
     {
-        if (CurrentLobbyOwner.Equals(friend) && !isHost)
+        if (CurrentLobby.Owner.Equals(friend) && !isHost)
         {
-            CurrentLobbyOwner = new Friend();
-
             //PlayMenuController.BackToMainmenu()
             typeof(PlayMenuController).GetMethod("BackToMainmenu", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(PlayMenuController.playMenuController, new object[] { });
@@ -606,6 +627,7 @@ public class LobbyManager : MonoBehaviour
         public ulong OwnerOfCharaId;
         public int Chara;
         public bool IsBot;
+        public GameObject InGameShip;
     }
 
     public struct GameSettings

@@ -1,11 +1,10 @@
-using System;
-
 namespace Fleeted.packets;
 
 public class Packet
 {
-    public byte[] data;
+    public byte[] Data;
+
     public PacketType Id;
 
-    public Guid sender;
+    public ulong SteamId;
 }

@@ -53,7 +53,8 @@ public static class OnStartGamePatch
 {
     static void Postfix()
     {
-        if (LobbyManager.Instance.isHost)
-            LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
+        if (!LobbyManager.Instance.isHost) return;
+        LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
+        InGameNetManager.Instance.StartClient(true);
     }
 }
