@@ -72,11 +72,11 @@ public class ProtocolWriter : BinaryWriter
 
     public void Write(ShipPacket value)
     {
-        Write(value.Slot);
         Write(value.Position);
-        Write(value.Velocity);
         Write(value.Rotation);
+        Write(value.Slot);
         Write(value.StickRotation);
+        Write(value.Velocity);
     }
 
     public void Write(BulkShipUpdate value)
@@ -99,6 +99,7 @@ public class ProtocolWriter : BinaryWriter
         Write(value.SourceShip);
         Write(value.Id);
         Write(value.Origin);
+        Write(value.IsEmpty);
     }
 
     public void Write(UpdateProjectilePacket value)
@@ -107,7 +108,15 @@ public class ProtocolWriter : BinaryWriter
         Write(value.Id);
         Write(value.Position);
         Write(value.Velocity);
-        Write(value.Enabled);
+    }
+
+    public void Write(BulkProjectileUpdate value)
+    {
+        Write(value.Updates.Count);
+        foreach (var update in value.Updates)
+        {
+            Write(update);
+        }
     }
 }
 
@@ -190,11 +199,11 @@ public class ProtocolReader : BinaryReader
     {
         return new ShipPacket
         {
-            Slot = ReadInt32(),
             Position = ReadVector2(),
+            Rotation = ReadSingle(),
+            Slot = ReadInt32(),
+            StickRotation = ReadSingle(),
             Velocity = ReadVector2(),
-            Rotation = ReadVector3(),
-            StickRotation = ReadVector3(),
         };
     }
 
@@ -229,6 +238,7 @@ public class ProtocolReader : BinaryReader
             SourceShip = ReadInt32(),
             Id = ReadInt32(),
             Origin = ReadVector2(),
+            IsEmpty = ReadBoolean(),
         };
     }
 
@@ -240,7 +250,6 @@ public class ProtocolReader : BinaryReader
             Id = ReadInt32(),
             Position = ReadVector2(),
             Velocity = ReadVector2(),
-            Enabled = ReadBoolean()
         };
     }
 

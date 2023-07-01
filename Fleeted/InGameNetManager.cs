@@ -27,11 +27,17 @@ public class InGameNetManager : MonoBehaviour
     public static InGameNetManager Instance;
 
     public List<GameObject> shipsGO;
+    public List<int> ownedSlots = new();
 
     public bool isHost;
     public bool isClient;
+    public readonly Dictionary<int, NetBulletController> bulletControllers = new();
+    public readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
+    public readonly Dictionary<int, NetShipController> controllersSlots = new();
+    public readonly Dictionary<int, Rigidbody2D> rbBullets = new();
 
-    public List<int> OwnedSlots = new();
+    public readonly Dictionary<int, Rigidbody2D> rbSlots = new();
+
     private int _bytesOut = 0;
 
     private bool _isShipReferenceUpdatePending;
@@ -46,7 +52,9 @@ public class InGameNetManager : MonoBehaviour
     private int _totalOut = 0;
 
     public TimedAction MainSendTick = new(1.0f / 10);
-    private Dictionary<int, Rigidbody2D> RbSlots = new();
+
+    public HashSet<BulletController> ownedLiveBullets = new();
+
 
     private void Awake()
     {
@@ -83,6 +91,8 @@ public class InGameNetManager : MonoBehaviour
         if (MainSendTick.TrueDone() && GlobalController.globalController.screen == GlobalController.screens.game)
         {
             SendShipUpdates();
+
+            SendProjectileUpdates();
 
             MainSendTick.Start();
         }
@@ -126,12 +136,12 @@ public class InGameNetManager : MonoBehaviour
 
     private void SendShipUpdates()
     {
-        var bulkShipUpdate = new BulkShipUpdate()
+        var bulkShipUpdate = new BulkShipUpdate
         {
             Updates = new List<ShipPacket>(),
         };
 
-        foreach (var slot in OwnedSlots)
+        foreach (var slot in ownedSlots)
         {
             var ship = LobbyManager.Instance.Players[slot].InGameShip;
             var position = ship.transform.position;
@@ -140,25 +150,57 @@ public class InGameNetManager : MonoBehaviour
             var shipPacket = new ShipPacket
             {
                 Position = new Vector2(position.x, position.y),
-                Rotation = ship.transform.rotation.eulerAngles,
-                StickRotation = stickT.localRotation.eulerAngles,
+                Rotation = ship.transform.rotation.eulerAngles.z,
                 Slot = slot,
-                Velocity = RbSlots[slot].velocity,
+                StickRotation = stickT.localRotation.eulerAngles.z,
+                Velocity = new Vector2(rbSlots[slot].velocity.x, rbSlots[slot].velocity.y),
             };
 
             bulkShipUpdate.Updates.Add(shipPacket);
         }
 
         using MemoryStream memoryStream = new MemoryStream();
-
         using (var writer = new ProtocolWriter(memoryStream))
         {
             writer.Write(bulkShipUpdate);
         }
 
-        byte[] data = memoryStream.ToArray();
+        var data = memoryStream.ToArray();
 
         SendPacket(SteamClient.SteamId, data, PacketType.ShipUpdate, P2PSend.Unreliable);
+    }
+
+    private void SendProjectileUpdates()
+    {
+        if (!ownedLiveBullets.Any()) return;
+
+        var bulkProjectileUpdate = new BulkProjectileUpdate
+        {
+            Updates = new List<UpdateProjectilePacket>(),
+        };
+
+        foreach (var bc in ownedLiveBullets)
+        {
+            var updateProjectilePacket = new UpdateProjectilePacket()
+            {
+                Id = bc.GetInstanceID(),
+                Position = bc.transform.position,
+                SourceShip = bc.player - 1,
+                Velocity = rbBullets[bc.GetInstanceID()].velocity,
+            };
+
+            bulkProjectileUpdate.Updates.Add(updateProjectilePacket);
+        }
+
+        using MemoryStream memoryStream = new MemoryStream();
+        using (var writer = new ProtocolWriter(memoryStream))
+        {
+            writer.Write(bulkProjectileUpdate);
+        }
+
+        var data = memoryStream.ToArray();
+
+        SendPacket(SteamClient.SteamId, data, PacketType.ProjectileUpdate, P2PSend.Unreliable);
     }
 
     private void ReadPackets()
@@ -188,48 +230,40 @@ public class InGameNetManager : MonoBehaviour
             switch (packet.Id)
             {
                 case PacketType.ShipUpdate:
-                    BulkShipUpdate bulkShipPacket;
-                    try
-                    {
-                        bulkShipPacket = dataStream.ReadBulkShipUpdate();
-                    }
-                    catch (EndOfStreamException)
-                    {
-                        // FIXME: Im not sure what exactly causes this error but it appears to leave the packet unaffected
-                        break;
-                    }
+                    var bulkShipPacket = dataStream.ReadBulkShipUpdate();
 
                     foreach (var shipPacket in bulkShipPacket.Updates)
                     {
-                        if (OwnedSlots.Contains(shipPacket.Slot)) continue;
-                        var ship = LobbyManager.Instance.Players[shipPacket.Slot].InGameShip;
-                        var stick = ship.transform.GetChild(2).GetChild(2);
+                        if (ownedSlots.Contains(shipPacket.Slot)) break;
 
-
-                        RbSlots[shipPacket.Slot].velocity = shipPacket.Velocity;
-                        stick.localRotation = Quaternion.Euler(shipPacket.StickRotation);
+                        controllersSlots[shipPacket.Slot].ReceiveUpdates(shipPacket, PacketType.ShipUpdate);
                     }
 
                     break;
                 case PacketType.Death:
                     break;
                 case PacketType.SpawnProjectile:
+                    var spawnProjectilePacket = dataStream.ReadSpawnProjectilePacket();
+                    var slot = spawnProjectilePacket.SourceShip;
+
+                    if (ownedSlots.Contains(slot)) break;
+
+                    if (controllersSlots.TryGetValue(slot, out var c))
+                    {
+                        c.ReceiveUpdates(spawnProjectilePacket, PacketType.SpawnProjectile);
+                    }
+
                     break;
                 case PacketType.ProjectileUpdate:
-                    break;
-            }
+                    var bulkProjectileUpdate = dataStream.ReadBulkProjectileUpdate();
 
-            if (!isHost) return;
+                    foreach (var projectilePacket in bulkProjectileUpdate.Updates)
+                    {
+                        if (ownedSlots.Contains(projectilePacket.SourceShip)) continue;
 
-            switch (packet.Id) // Echo the packets
-            {
-                case PacketType.ShipUpdate:
-                case PacketType.ProjectileUpdate:
-                    SendPacket(packet.SteamId, packet.Data, packet.Id, P2PSend.Unreliable);
-                    break;
-                case PacketType.Death:
-                case PacketType.SpawnProjectile:
-                    SendPacket(packet.SteamId, packet.Data, packet.Id, P2PSend.Reliable);
+                        bulletControllers[projectilePacket.Id].ReceiveUpdates(projectilePacket);
+                    }
+
                     break;
             }
         }
@@ -270,42 +304,62 @@ public class InGameNetManager : MonoBehaviour
             _specificBytesOut[type] = packetData.Length;
 
         var lobby = LobbyManager.Instance.CurrentLobby;
-        switch (isHost)
-        {
-            case false:
-                SteamNetworking.SendP2PPacket(lobby.Owner.Id, packetData, packetData.Length, 0, sendFlags);
-                break;
-            case true:
-                foreach (var member in lobby.Members)
-                {
-                    if (member.Id == lobby.Owner.Id) continue;
-                    SteamNetworking.SendP2PPacket(member.Id, packetData, packetData.Length, 0, sendFlags);
-                }
 
-                break;
+        foreach (var member in lobby.Members)
+        {
+            SteamNetworking.SendP2PPacket(member.Id, packetData, packetData.Length, 0, sendFlags);
         }
     }
 
     public void UpdateShipReferences()
     {
-        OwnedSlots.Clear();
-        RbSlots.Clear();
+        ownedSlots.Clear();
+        rbSlots.Clear();
+        controllersSlots.Clear();
+        bulletsSlots.Clear();
+        rbBullets.Clear();
+        bulletControllers.Clear();
 
+        var ships = GameState.gameState.playerShips;
         for (var i = 0; i < 8; i++)
         {
             if (LobbyManager.Instance.Players.TryGetValue(i, out var value))
             {
-                LobbyManager.Instance.Players[i] = value with {InGameShip = GameState.gameState.playerShips[i]};
+                LobbyManager.Instance.Players[i] = value with {InGameShip = ships[i]};
 
-                RbSlots.Add(i, GameState.gameState.playerShips[i].GetComponent<Rigidbody2D>());
+                rbSlots.Add(i, ships[i].GetComponent<Rigidbody2D>());
 
                 if (IsSlotOwnedByThisClient(i))
-                    OwnedSlots.Add(i);
+                    ownedSlots.Add(i);
+                else
+                {
+                    controllersSlots.Add(i,
+                        ships[i].TryGetComponent<NetShipController>(out var controller)
+                            ? controller
+                            : ships[i].AddComponent<NetShipController>());
+                }
+
+                var bullets =
+                    (from object bullet in ships[i].transform.GetChild(8)
+                        select ((Transform) bullet).GetComponent<BulletController>())
+                    .ToDictionary(bulletController => bulletController.GetInstanceID());
+
+                foreach (var b in bullets)
+                {
+                    rbBullets.Add(b.Key, b.Value.GetComponent<Rigidbody2D>());
+
+                    bulletControllers.Add(b.Key,
+                        b.Value.gameObject.TryGetComponent<NetBulletController>(out var controller)
+                            ? controller
+                            : b.Value.gameObject.AddComponent<NetBulletController>());
+                }
+
+                bulletsSlots.Add(i, bullets);
             }
         }
     }
 
-    private static bool IsSlotOwnedByThisClient(int slot)
+    public static bool IsSlotOwnedByThisClient(int slot)
     {
         return LobbyManager.Instance.Players[slot].OwnerOfCharaId == SteamClient.SteamId;
     }
@@ -357,23 +411,23 @@ public class InGameNetManager : MonoBehaviour
             if (!IsEveryoneReady(lobby)) continue;
 
             lobby.SetData("StartTime",
-                $"{DateTime.Now.Ticks + 30000000L}"); // Give 3 seconds of headstart for the rest to be ready
+                $"{DateTimeOffset.UtcNow.UtcTicks + 30000000L}"); // Give 3 seconds of headstart for the rest to be ready
             break;
         }
 
         yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
 
-        Plugin.Logger.LogInfo($"Current Time: {DateTime.Now.Ticks}");
+        Plugin.Logger.LogInfo($"Current Time: {DateTimeOffset.UtcNow.UtcTicks}");
         var startTime = lobby.GetData("StartTime");
         Plugin.Logger.LogInfo($"Everyone is ready, starting at {startTime}");
 
         ShowConnectingMessage(true);
 
-        yield return new WaitUntil(() => DateTime.Now.Ticks >= long.Parse(startTime));
+        yield return new WaitUntil(() => DateTimeOffset.UtcNow.UtcTicks >= long.Parse(startTime));
 
         ShowConnectingMessage(false);
 
-        Plugin.Logger.LogInfo($"Current Time: {DateTime.Now.Ticks}");
+        Plugin.Logger.LogInfo($"Current Time: {DateTimeOffset.UtcNow.UtcTicks}");
         Plugin.Logger.LogInfo("Starting Round...");
 
         lobby.SetMemberData("Ready", string.Empty);

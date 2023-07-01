@@ -208,3 +208,22 @@ public static class ManageCameraEvenInPause4
         }
     }
 }
+
+// Testing
+[HarmonyPatch(typeof(CameraController), "Move")]
+public static class NoCameraMovementTest0
+{
+    static bool Prefix()
+    {
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(CameraController), "Resize")]
+public static class NoCameraMovementTest1
+{
+    static bool Prefix()
+    {
+        return false;
+    }
+}

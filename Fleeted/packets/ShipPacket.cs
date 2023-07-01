@@ -7,11 +7,11 @@ public class ShipPacket
 {
     public Vector2 Position;
 
-    public Vector3 Rotation;
+    public float Rotation;
 
     public int Slot;
 
-    public Vector3 StickRotation;
+    public float StickRotation;
 
     public Vector2 Velocity;
 }
