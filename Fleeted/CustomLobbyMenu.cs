@@ -81,6 +81,9 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public void HideLobbyMenu()
     {
+        // TODO: Abandon Connection
+        InGameNetManager.Instance.ResetState();
+
         LobbyManager.Instance.CurrentLobby.Leave();
         LobbyManager.Instance.isHost = false;
         LobbyManager.Instance.hostOptions = true;

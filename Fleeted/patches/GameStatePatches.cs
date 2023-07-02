@@ -17,9 +17,12 @@ public static class StartNewRoundWhenEveryoneReadyPatch
         RemovePauseMenuDuringVictory1.RoundEndWhilePaused = false;
 
         if (!StartingInProgress)
+        {
             InGameNetManager.Instance.StartCoroutine(
                 InGameNetManager.Instance
                     .StartNewNetRound(__instance));
+        }
+
         return false;
     }
 

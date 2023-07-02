@@ -18,43 +18,31 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
-    public enum CTarget
-    {
-        Server,
-        Clients,
-    }
-
     public static InGameNetManager Instance;
+
+    public bool isHost;
+    public bool isClient;
 
     public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
 
-    public bool isHost;
-    public bool isClient;
-    public readonly Dictionary<int, NetBulletController> bulletControllers = new();
-    public readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
-    public readonly Dictionary<int, NetShipController> controllersSlots = new();
-    public readonly Dictionary<int, Rigidbody2D> rbBullets = new();
+    private readonly Dictionary<int, NetBulletController> bulletControllers = new();
+    private readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
+    private readonly Dictionary<int, NetShipController> controllersSlots = new();
 
-    public readonly Dictionary<int, Rigidbody2D> rbSlots = new();
+    public readonly TimedAction MainSendTick = new(1.0f / 10);
+    private readonly Dictionary<int, Rigidbody2D> rbBullets = new();
+    private readonly Dictionary<int, Rigidbody2D> rbSlots = new();
 
-    private int _bytesOut = 0;
+    private int _bytesOut;
 
     private bool _isShipReferenceUpdatePending;
-    private int _pps = 0;
-    private int _ppsOut = 0;
+    private int _pps;
+    private int _ppsOut;
 
     private Dictionary<PacketType, int> _specificBytesOut = new Dictionary<PacketType, int>();
 
-    private float _ticker2 = 0f;
-    private int _total = 0;
-    private int _totalBytesOut = 0;
-    private int _totalOut = 0;
-
-    public TimedAction MainSendTick = new(1.0f / 10);
-
     public HashSet<BulletController> ownedLiveBullets = new();
-
 
     private void Awake()
     {
@@ -98,6 +86,14 @@ public class InGameNetManager : MonoBehaviour
         }
     }
 
+    private void OnGUI()
+    {
+        if (!isClient) return;
+
+        GUI.Label(new Rect(10, 30, 200, 40), $"Inbound: {_pps} PPS");
+        GUI.Label(new Rect(10, 50, 200, 40), $"Outbound: {_ppsOut} PPS -- {_bytesOut} Bytes");
+    }
+
     private void OnP2PSessionRequest(SteamId steamId)
     {
         if (LobbyManager.Instance.CurrentLobby.Members.Select(member => member.Id).ToList()
@@ -110,13 +106,9 @@ public class InGameNetManager : MonoBehaviour
 
     public void ResetState()
     {
-        _ticker2 = 0f;
         _pps = 0;
-        _total = 0;
         _ppsOut = 0;
-        _totalOut = 0;
         _bytesOut = 0;
-        _totalBytesOut = 0;
 
         MainSendTick.Start();
 
@@ -221,8 +213,6 @@ public class InGameNetManager : MonoBehaviour
 
             if (packet.SteamId == SteamClient.SteamId) return;
 
-            _total++;
-
             using var compressedStream = new MemoryStream(packet.Data);
             using var decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
             using var dataStream = new ProtocolReader(decompressStream);
@@ -261,6 +251,8 @@ public class InGameNetManager : MonoBehaviour
                     {
                         if (ownedSlots.Contains(projectilePacket.SourceShip)) continue;
 
+                        Plugin.Logger.LogWarning(projectilePacket == null);
+
                         bulletControllers[projectilePacket.Id].ReceiveUpdates(projectilePacket);
                     }
 
@@ -271,8 +263,6 @@ public class InGameNetManager : MonoBehaviour
 
     public void SendPacket(ulong from, byte[] data, PacketType type, P2PSend sendFlags)
     {
-        _totalOut++;
-
         using var compressOut = new MemoryStream();
         using (var deflateStream = new DeflateStream(compressOut, CompressionLevel.Optimal))
         {
@@ -295,8 +285,6 @@ public class InGameNetManager : MonoBehaviour
         }
 
         var packetData = packetStream.ToArray();
-
-        _totalBytesOut += packetData.Length;
 
         if (_specificBytesOut.ContainsKey(type))
             _specificBytesOut[type] += packetData.Length;
@@ -379,8 +367,17 @@ public class InGameNetManager : MonoBehaviour
                 StartClient();
 
                 //smcInstance.StartGame();
-                typeof(StageMenuController).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic)
-                    .Invoke(smcInstance, null);
+                try
+                {
+                    typeof(StageMenuController).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(smcInstance, null);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Logger.LogError(ex);
+                    Plugin.Logger.LogError("PLEASE REPORT THIS ERROR!!!!!!");
+                }
+
                 break;
             }
             case GlobalController.screens.gameresults:
@@ -436,6 +433,7 @@ public class InGameNetManager : MonoBehaviour
             lobby.SetData("StartTime", string.Empty);
             lobby.SetData("GameStarted", string.Empty);
         }
+
 
         StartNewRoundWhenEveryoneReadyPatch.StartNewRound(instance);
 
