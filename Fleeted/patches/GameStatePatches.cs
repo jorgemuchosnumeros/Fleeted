@@ -57,47 +57,55 @@ public static class StartNewRoundWhenEveryoneReadyPatch
         }
 
         ResultsController.resultsController.UpdateFadePos(instance.cameraController.camT.position);
+
         if (GlobalController.globalController.mode == GlobalController.modes.survival)
         {
             //StartNewRoundSurvival();
-            typeof(GameState).GetMethod("StartNewRoundSurvival", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+            try
+            {
+                typeof(GameState).GetMethod("StartNewRoundSurvival", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(instance, new object[] { });
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError(ex);
+            }
         }
         else if (GlobalController.globalController.mode == GlobalController.modes.leader)
         {
             //StartNewRoundLeader();
             typeof(GameState).GetMethod("StartNewRoundLeader", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+                .Invoke(instance, new object[] { });
         }
         else if (GlobalController.globalController.mode == GlobalController.modes.race)
         {
             //StartNewRoundRace();
             typeof(GameState).GetMethod("StartNewRoundRace", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+                .Invoke(instance, new object[] { });
         }
         else if (GlobalController.globalController.mode == GlobalController.modes.yincana)
         {
             //StartNewRoundYincana();
             typeof(GameState).GetMethod("StartNewRoundYincana", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+                .Invoke(instance, new object[] { });
         }
         else if (GlobalController.globalController.mode == GlobalController.modes.sumo)
         {
             //StartNewRoundSumo();
             typeof(GameState).GetMethod("StartNewRoundSumo", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+                .Invoke(instance, new object[] { });
         }
         else if (GlobalController.globalController.mode == GlobalController.modes.story)
         {
             //StartNewRoundStory();
             typeof(GameState).GetMethod("StartNewRoundStory", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.Invoke(instance, new object[] { });
+                .Invoke(instance, new object[] { });
         }
 
         instance.ResetShips();
         //ResetPlayersDistance();
         typeof(GameState).GetMethod("ResetPlayersDistance", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.Invoke(instance, new object[] { });
+            .Invoke(instance, new object[] { });
 
         MusicController.musicController.PlayMusic();
         instance.onlyBotsLeft = false;

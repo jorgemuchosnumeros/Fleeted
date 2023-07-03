@@ -70,6 +70,11 @@ public class ProtocolWriter : BinaryWriter
         Write(value.Data);
     }
 
+    public void Write(PingPacket value)
+    {
+        Write(value.Response);
+    }
+
     public void Write(ShipPacket value)
     {
         Write(value.Position);
@@ -92,6 +97,13 @@ public class ProtocolWriter : BinaryWriter
     {
         Write(value.SourceShip);
         Write(value.TargetShip);
+        Write(value.IsExplosionBig);
+    }
+
+    public void Write(KillPacket value)
+    {
+        Write(value.TargetShip);
+        Write(value.IsExplosionBig);
     }
 
     public void Write(SpawnProjectilePacket value)
@@ -195,6 +207,14 @@ public class ProtocolReader : BinaryReader
         };
     }
 
+    public PingPacket ReadPingPacket()
+    {
+        return new PingPacket()
+        {
+            Response = ReadBoolean(),
+        };
+    }
+
     public ShipPacket ReadShipPacket()
     {
         return new ShipPacket
@@ -228,6 +248,16 @@ public class ProtocolReader : BinaryReader
         {
             SourceShip = ReadInt32(),
             TargetShip = ReadInt32(),
+            IsExplosionBig = ReadBoolean(),
+        };
+    }
+
+    public KillPacket ReadKillPacket()
+    {
+        return new KillPacket
+        {
+            TargetShip = ReadInt32(),
+            IsExplosionBig = ReadBoolean(),
         };
     }
 

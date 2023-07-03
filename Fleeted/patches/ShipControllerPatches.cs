@@ -31,9 +31,9 @@ public static class SendShooting
                 writer.Write(spawnProjectilePacket);
             }
 
-            byte[] data = memoryStream.ToArray();
+            var data = memoryStream.ToArray();
 
-            InGameNetManager.Instance.SendPacket(SteamClient.SteamId, data, PacketType.SpawnProjectile,
+            InGameNetManager.Instance.SendPacket2All(SteamClient.SteamId, data, PacketType.SpawnProjectile,
                 P2PSend.Reliable);
         }
     }
@@ -59,8 +59,9 @@ public static class SendEmptyShooting
             writer.Write(spawnProjectilePacket);
         }
 
-        byte[] data = memoryStream.ToArray();
+        var data = memoryStream.ToArray();
 
-        InGameNetManager.Instance.SendPacket(SteamClient.SteamId, data, PacketType.SpawnProjectile, P2PSend.Reliable);
+        InGameNetManager.Instance.SendPacket2All(SteamClient.SteamId, data, PacketType.SpawnProjectile,
+            P2PSend.Reliable);
     }
 }

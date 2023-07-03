@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -25,22 +26,25 @@ public class InGameNetManager : MonoBehaviour
 
     public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
+    private readonly Stopwatch _pingStopwatch = new();
 
     private readonly Dictionary<int, NetBulletController> bulletControllers = new();
     private readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
     private readonly Dictionary<int, NetShipController> controllersSlots = new();
+    public readonly TimedAction GracePeriod = new(3.5f);
+    private readonly Dictionary<int, int> killVotes = new();
 
     public readonly TimedAction MainSendTick = new(1.0f / 10);
+
+    private readonly Dictionary<SteamId, long> pingMap = new();
+    public readonly TimedAction PingSendTick = new(1.0f);
+
     private readonly Dictionary<int, Rigidbody2D> rbBullets = new();
     private readonly Dictionary<int, Rigidbody2D> rbSlots = new();
 
-    private int _bytesOut;
-
     private bool _isShipReferenceUpdatePending;
-    private int _pps;
-    private int _ppsOut;
 
-    private Dictionary<PacketType, int> _specificBytesOut = new Dictionary<PacketType, int>();
+    private Dictionary<PacketType, int> _specificBytesOut = new();
 
     public HashSet<BulletController> ownedLiveBullets = new();
 
@@ -64,6 +68,7 @@ public class InGameNetManager : MonoBehaviour
         if (!isClient) return;
 
         var inCountdown = GlobalController.globalController.screen == GlobalController.screens.gamecountdown;
+
         if (inCountdown && _isShipReferenceUpdatePending)
         {
             UpdateShipReferences();
@@ -76,7 +81,9 @@ public class InGameNetManager : MonoBehaviour
 
         ReadPackets();
 
-        if (MainSendTick.TrueDone() && GlobalController.globalController.screen == GlobalController.screens.game)
+        if (GlobalController.globalController.screen != GlobalController.screens.game) return;
+
+        if (MainSendTick.TrueDone())
         {
             SendShipUpdates();
 
@@ -84,14 +91,32 @@ public class InGameNetManager : MonoBehaviour
 
             MainSendTick.Start();
         }
+
+        if (PingSendTick.TrueDone())
+        {
+            SendPingPacket(false);
+
+            PingSendTick.Start();
+        }
     }
 
     private void OnGUI()
     {
         if (!isClient) return;
 
-        GUI.Label(new Rect(10, 30, 200, 40), $"Inbound: {_pps} PPS");
-        GUI.Label(new Rect(10, 50, 200, 40), $"Outbound: {_ppsOut} PPS -- {_bytesOut} Bytes");
+        var members = LobbyManager.Instance.CurrentLobby.Members.Where(member => member.Id != SteamClient.SteamId)
+            .ToList();
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var ping = 0L;
+            if (pingMap.TryGetValue(members[i].Id, out var gotPing))
+            {
+                ping = gotPing;
+            }
+
+            GUI.Label(new Rect(10, 30 + i * 20, 200, 40), $"{members[i].Name} Ping: {ping} ms");
+        }
     }
 
     private void OnP2PSessionRequest(SteamId steamId)
@@ -106,11 +131,9 @@ public class InGameNetManager : MonoBehaviour
 
     public void ResetState()
     {
-        _pps = 0;
-        _ppsOut = 0;
-        _bytesOut = 0;
-
         MainSendTick.Start();
+        PingSendTick.Start();
+        _pingStopwatch.Start();
 
         LobbyManager.Instance.Players.Clear();
 
@@ -159,7 +182,7 @@ public class InGameNetManager : MonoBehaviour
 
         var data = memoryStream.ToArray();
 
-        SendPacket(SteamClient.SteamId, data, PacketType.ShipUpdate, P2PSend.Unreliable);
+        SendPacket2All(SteamClient.SteamId, data, PacketType.ShipUpdate, P2PSend.Unreliable);
     }
 
     private void SendProjectileUpdates()
@@ -192,7 +215,33 @@ public class InGameNetManager : MonoBehaviour
 
         var data = memoryStream.ToArray();
 
-        SendPacket(SteamClient.SteamId, data, PacketType.ProjectileUpdate, P2PSend.Unreliable);
+        SendPacket2All(SteamClient.SteamId, data, PacketType.ProjectileUpdate, P2PSend.Unreliable);
+    }
+
+    private void SendPingPacket(bool response, ulong sender = 0)
+    {
+        var pingPacket = new PingPacket()
+        {
+            Response = response,
+        };
+
+        using MemoryStream memoryStream = new MemoryStream();
+        using (var writer = new ProtocolWriter(memoryStream))
+        {
+            writer.Write(pingPacket);
+        }
+
+        var data = memoryStream.ToArray();
+
+        if (response)
+        {
+            SendPacketToSomeone(SteamClient.SteamId, sender, data, PacketType.Ping, P2PSend.Unreliable);
+        }
+        else
+        {
+            SendPacket2All(SteamClient.SteamId, data, PacketType.Ping, P2PSend.Unreliable);
+            _pingStopwatch.Restart();
+        }
     }
 
     private void ReadPackets()
@@ -231,6 +280,35 @@ public class InGameNetManager : MonoBehaviour
 
                     break;
                 case PacketType.Death:
+                    var deathPacket = dataStream.ReadDeathPacket();
+                    var target = deathPacket.TargetShip;
+
+                    if (ownedSlots.Contains(target)) break;
+
+                    controllersSlots[target].ReceiveUpdates(deathPacket, PacketType.Death);
+                    break;
+                case PacketType.Kill:
+                    var killPacket = dataStream.ReadKillPacket();
+                    var defendant = killPacket.TargetShip;
+
+                    if (!ownedSlots.Contains(defendant)) break;
+
+                    var memberCount = LobbyManager.Instance.CurrentLobby.Members.Count();
+                    var voteLimit = memberCount / 2 + 1;
+
+                    if (killVotes.TryGetValue(defendant, out _))
+                        killVotes[defendant]++;
+                    else
+                        killVotes.Add(defendant, 1);
+
+                    Plugin.Logger.LogInfo(
+                        $"{defendant} is accused of unreliably dying, votes: {killVotes[defendant]}/{memberCount / 2 + 1}");
+
+                    if (killVotes[defendant] >= voteLimit)
+                    {
+                        controllersSlots[defendant].ReceiveUpdates(killPacket, PacketType.Kill);
+                    }
+
                     break;
                 case PacketType.SpawnProjectile:
                     var spawnProjectilePacket = dataStream.ReadSpawnProjectilePacket();
@@ -238,9 +316,9 @@ public class InGameNetManager : MonoBehaviour
 
                     if (ownedSlots.Contains(slot)) break;
 
-                    if (controllersSlots.TryGetValue(slot, out var c))
+                    if (controllersSlots.TryGetValue(slot, out var sppc))
                     {
-                        c.ReceiveUpdates(spawnProjectilePacket, PacketType.SpawnProjectile);
+                        sppc.ReceiveUpdates(spawnProjectilePacket, PacketType.SpawnProjectile);
                     }
 
                     break;
@@ -257,11 +335,31 @@ public class InGameNetManager : MonoBehaviour
                     }
 
                     break;
+                case PacketType.Ping:
+                    var pingPacket = dataStream.ReadPingPacket();
+
+                    if (!pingPacket.Response)
+                    {
+                        SendPingPacket(true, packet.SteamId);
+                    }
+                    else
+                    {
+                        if (pingMap.TryGetValue(packet.SteamId, out _))
+                        {
+                            pingMap[packet.SteamId] = _pingStopwatch.ElapsedMilliseconds;
+                        }
+                        else
+                        {
+                            pingMap.Add(packet.SteamId, _pingStopwatch.ElapsedMilliseconds);
+                        }
+                    }
+
+                    break;
             }
         }
     }
 
-    public void SendPacket(ulong from, byte[] data, PacketType type, P2PSend sendFlags)
+    public void SendPacket2All(ulong from, byte[] data, PacketType type, P2PSend sendFlags)
     {
         using var compressOut = new MemoryStream();
         using (var deflateStream = new DeflateStream(compressOut, CompressionLevel.Optimal))
@@ -299,6 +397,34 @@ public class InGameNetManager : MonoBehaviour
         }
     }
 
+    public void SendPacketToSomeone(ulong from, ulong to, byte[] data, PacketType type, P2PSend sendFlags)
+    {
+        using var compressOut = new MemoryStream();
+        using (var deflateStream = new DeflateStream(compressOut, CompressionLevel.Optimal))
+        {
+            deflateStream.Write(data, 0, data.Length);
+        }
+
+        var compressed = compressOut.ToArray();
+
+        using MemoryStream packetStream = new MemoryStream();
+        Packet packet = new Packet
+        {
+            Id = type,
+            SteamId = from,
+            Data = compressed
+        };
+
+        using (var writer = new ProtocolWriter(packetStream))
+        {
+            writer.Write(packet);
+        }
+
+        var packetData = packetStream.ToArray();
+
+        SteamNetworking.SendP2PPacket(to, packetData, packetData.Length, 0, sendFlags);
+    }
+
     public void UpdateShipReferences()
     {
         ownedSlots.Clear();
@@ -307,6 +433,8 @@ public class InGameNetManager : MonoBehaviour
         bulletsSlots.Clear();
         rbBullets.Clear();
         bulletControllers.Clear();
+        pingMap.Clear();
+        killVotes.Clear();
 
         var ships = GameState.gameState.playerShips;
         for (var i = 0; i < 8; i++)
@@ -345,6 +473,12 @@ public class InGameNetManager : MonoBehaviour
                 bulletsSlots.Add(i, bullets);
             }
         }
+
+        foreach (var id in LobbyManager.Instance.CurrentLobby.Members.Select(member => member.Id)
+                     .Where(id => id != SteamClient.SteamId))
+        {
+            pingMap.Add(id, 0);
+        }
     }
 
     public static bool IsSlotOwnedByThisClient(int slot)
@@ -367,17 +501,8 @@ public class InGameNetManager : MonoBehaviour
                 StartClient();
 
                 //smcInstance.StartGame();
-                try
-                {
-                    typeof(StageMenuController).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic)
-                        .Invoke(smcInstance, null);
-                }
-                catch (Exception ex)
-                {
-                    Plugin.Logger.LogError(ex);
-                    Plugin.Logger.LogError("PLEASE REPORT THIS ERROR!!!!!!");
-                }
-
+                typeof(StageMenuController).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(smcInstance, null);
                 break;
             }
             case GlobalController.screens.gameresults:
@@ -434,8 +559,9 @@ public class InGameNetManager : MonoBehaviour
             lobby.SetData("GameStarted", string.Empty);
         }
 
-
         StartNewRoundWhenEveryoneReadyPatch.StartNewRound(instance);
+
+        GracePeriod.Start();
 
         StartNewRoundWhenEveryoneReadyPatch.StartingInProgress = false;
     }
