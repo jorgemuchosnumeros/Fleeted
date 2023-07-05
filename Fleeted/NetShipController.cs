@@ -14,7 +14,6 @@ public class NetShipController : MonoBehaviour
     private ShipController _controller;
     private DeathPacket _latestDPacket;
     private PacketType _latestID;
-    private KillPacket _latestKPacket;
     private SpawnProjectilePacket _latestPSPacket;
 
     private ShipPacket _latestSPacket;
@@ -74,7 +73,7 @@ public class NetShipController : MonoBehaviour
                 Plugin.Logger.LogInfo(
                     $"Received death from {_latestDPacket.TargetShip} by {_latestDPacket.SourceShip}");
 
-                ExplodeNetShip(_latestDPacket.IsExplosionBig);
+                ExplodeNetShip(_latestDPacket.IsExplosionBig, _controller, _ccollider);
 
                 break;
             case PacketType.SpawnProjectile:
@@ -101,26 +100,27 @@ public class NetShipController : MonoBehaviour
         }
     }
 
-    private void ExplodeNetShip(bool big)
+    public static void ExplodeNetShip(bool big, ShipController controller, ShipColliderController ccontroller)
     {
         if (big)
         {
-            if (_controller.alive)
+            if (controller.alive)
             {
+                SendExplode.PermissionToDie = true;
                 typeof(ShipColliderController)
                     .GetMethod("ExplodeBig", BindingFlags.Instance | BindingFlags.NonPublic)
-                    .Invoke(_ccollider, null);
+                    .Invoke(ccontroller, null);
             }
         }
         else
         {
             var exploded = (bool) typeof(ShipColliderController)
-                .GetField("exploded", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(_ccollider);
+                .GetField("exploded", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ccontroller);
 
             if (!exploded)
             {
                 SendExplode.PermissionToDie = true;
-                _ccollider.Explode();
+                ccontroller.Explode();
             }
         }
     }
@@ -142,16 +142,6 @@ public class NetShipController : MonoBehaviour
     {
         _alreadyDead = false;
         _latestDPacket = packet;
-        _latestID = id;
-    }
-
-    public void ReceiveUpdates(KillPacket packet, PacketType id)
-    {
-        ExplodeNetShip(packet.IsExplosionBig);
-
-        Plugin.Logger.LogInfo($"Killed {packet.TargetShip} by vote");
-
-        _latestKPacket = packet;
         _latestID = id;
     }
 }

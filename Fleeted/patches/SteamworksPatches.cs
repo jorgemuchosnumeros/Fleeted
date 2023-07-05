@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 
 namespace Fleeted.patches;
 
-// We get rid of the old Steamworks.NET and use Facepunch.Steamworks instead
+// We get rid of the old Steamworks.NET and use Facepunch.Steamworks instead.
 
 [HarmonyPatch(typeof(SteamManager), "Awake")]
 public static class DeactivateSteamManager

@@ -210,6 +210,7 @@ public static class ManageCameraEvenInPause4
 }
 
 // Testing
+/*
 [HarmonyPatch(typeof(CameraController), "Move")]
 public static class NoCameraMovementTest0
 {
@@ -227,3 +228,4 @@ public static class NoCameraMovementTest1
         return false;
     }
 }
+*/

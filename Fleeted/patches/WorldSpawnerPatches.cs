@@ -1,20 +1,15 @@
-using System;
 using HarmonyLib;
-using Random = UnityEngine.Random;
+using Steamworks;
+using UnityEngine;
 
 namespace Fleeted.patches;
-
-public struct SeedHolder
-{
-    public static int MasterSeed => LobbyManager.Instance.seed;
-}
 
 [HarmonyPatch(typeof(WorldSpawner), "SetRandomMap")]
 public static class WorldSpawnerSyncPatch0
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -23,7 +18,7 @@ public static class WorldSpawnerSyncPatch1
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -32,7 +27,7 @@ public static class WorldSpawnerSyncPatch2
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -41,7 +36,7 @@ public static class WorldSpawnerSyncPatch3
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -50,7 +45,7 @@ public static class WorldSpawnerSyncPatch4
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -59,7 +54,7 @@ public static class WorldSpawnerSyncPatch5
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -68,7 +63,7 @@ public static class WorldSpawnerSyncPatch6
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -77,7 +72,7 @@ public static class WorldSpawnerSyncPatch7
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -86,7 +81,7 @@ public static class WorldSpawnerSyncPatch8
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -95,7 +90,7 @@ public static class WorldSpawnerSyncPatch9
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -104,7 +99,7 @@ public static class WorldSpawnerSyncPatch10
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -113,7 +108,7 @@ public static class WorldSpawnerSyncPatch11
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -122,7 +117,7 @@ public static class WorldSpawnerSyncPatch12
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -131,7 +126,7 @@ public static class WorldSpawnerSyncPatch13
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -140,7 +135,7 @@ public static class WorldSpawnerSyncPatch14
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -149,7 +144,7 @@ public static class WorldSpawnerSyncPatch15
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -158,7 +153,7 @@ public static class WorldSpawnerSyncPatch16
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -167,7 +162,7 @@ public static class WorldSpawnerSyncPatch17
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
@@ -176,12 +171,14 @@ public static class CameraControllerSyncPatch
 {
     static void Prefix()
     {
-        Random.InitState(SeedHolder.MasterSeed);
+        InGameNetManager.Instance.CameraMovementSeed++;
+        Random.InitState(InGameNetManager.Instance.CameraMovementSeed);
     }
 
     static void Postfix()
     {
         if (LobbyManager.Instance.isHost)
-            LobbyManager.Instance.UpdateSeed(LobbyManager.Instance.CurrentLobby, (int) DateTime.Now.Ticks);
+            LobbyManager.Instance.UpdateSeed(LobbyManager.Instance.CurrentLobby,
+                (int) SteamUtils.SteamServerTime.Ticks);
     }
 }

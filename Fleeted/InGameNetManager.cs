@@ -33,6 +33,8 @@ public class InGameNetManager : MonoBehaviour
     private readonly Dictionary<int, NetShipController> controllersSlots = new();
     public readonly TimedAction GracePeriod = new(3.5f);
     private readonly Dictionary<int, int> killVotes = new();
+    
+    public int CameraMovementSeed;
 
     public readonly TimedAction MainSendTick = new(1.0f / 10);
 
@@ -306,7 +308,13 @@ public class InGameNetManager : MonoBehaviour
 
                     if (killVotes[defendant] >= voteLimit)
                     {
-                        controllersSlots[defendant].ReceiveUpdates(killPacket, PacketType.Kill);
+                        var player = LobbyManager.Instance.Players[defendant].InGameShip;
+                        var controller = player.GetComponent<ShipController>();
+                        var ccontroller = player.GetComponent<ShipColliderController>();
+                            
+                        Plugin.Logger.LogInfo($"Killed {killPacket.TargetShip} by vote");
+                        
+                        NetShipController.ExplodeNetShip(killPacket.IsExplosionBig, controller, ccontroller);
                     }
 
                     break;
@@ -524,32 +532,40 @@ public class InGameNetManager : MonoBehaviour
         // ensuring everyone starts at the same time
         StartNewRoundWhenEveryoneReadyPatch.StartingInProgress = true;
 
+        CameraMovementSeed = LobbyManager.Instance.seed;
+
         var lobby = LobbyManager.Instance.CurrentLobby;
         lobby.SetMemberData("Ready", "yes");
+        lobby.SetData("StartTime", string.Empty);
+
+        var serverClientTimeDiff = NTP.GetNetworkTime().Ticks - DateTime.UtcNow.Ticks;
+        
         while (LobbyManager.Instance.isHost)
         {
             Thread.Sleep(500);
 
-            if (!IsEveryoneReady(lobby)) continue;
+            if (IsEveryoneReady(lobby))
+            {
+                lobby.SetData("StartTime",
+                    $"{DateTime.UtcNow.Ticks + serverClientTimeDiff + 50000000L}"); // Give 5 seconds of headstart for the rest to be ready
+                break;
+            }
 
-            lobby.SetData("StartTime",
-                $"{DateTimeOffset.UtcNow.UtcTicks + 30000000L}"); // Give 3 seconds of headstart for the rest to be ready
-            break;
         }
 
         yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
 
-        Plugin.Logger.LogInfo($"Current Time: {DateTimeOffset.UtcNow.UtcTicks}");
+        Plugin.Logger.LogInfo($"Current Time: {DateTime.UtcNow.Ticks + serverClientTimeDiff}");
         var startTime = lobby.GetData("StartTime");
         Plugin.Logger.LogInfo($"Everyone is ready, starting at {startTime}");
 
         ShowConnectingMessage(true);
 
-        yield return new WaitUntil(() => DateTimeOffset.UtcNow.UtcTicks >= long.Parse(startTime));
+        yield return new WaitUntil(() => DateTime.UtcNow.Ticks + serverClientTimeDiff >= long.Parse(startTime));
 
         ShowConnectingMessage(false);
 
-        Plugin.Logger.LogInfo($"Current Time: {DateTimeOffset.UtcNow.UtcTicks}");
+        Plugin.Logger.LogInfo($"Current Time: {DateTime.UtcNow.Ticks + serverClientTimeDiff}");
         Plugin.Logger.LogInfo("Starting Round...");
 
         lobby.SetMemberData("Ready", string.Empty);
