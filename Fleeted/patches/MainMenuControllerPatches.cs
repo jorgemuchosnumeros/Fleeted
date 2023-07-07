@@ -23,7 +23,17 @@ public static class UpdateOnlineStatus
 {
     static void Postfix(MainMenuController __instance)
     {
-        ApplyPlayOnlinePatch.IsOnlineOptionSelected = __instance.selection == 2;
+        ApplyPlayOnlinePatch.IsOnlineOptionSelected = __instance.selection switch
+        {
+            1 => false,
+            2 => true,
+            3 => false,
+            4 => false,
+            5 => false,
+            6 => false,
+            7 => false,
+            _ => ApplyPlayOnlinePatch.IsOnlineOptionSelected
+        };
     }
 }
 

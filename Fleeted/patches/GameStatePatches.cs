@@ -15,6 +15,7 @@ public static class StartNewRoundWhenEveryoneReadyPatch
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
         RemovePauseMenuDuringVictory1.RoundEndWhilePaused = false;
 
+        Plugin.Logger.LogInfo("Starting new round!");
         if (!StartingInProgress)
         {
             InGameNetManager.Instance.StartCoroutine(
