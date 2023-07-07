@@ -4,38 +4,48 @@ namespace Fleeted.utils
 {
     public class TimedAction
     {
-        private Timer aTimer;
-        AutoResetEvent autoEvent = new AutoResetEvent(false);
-        private bool done;
+        private readonly AutoResetEvent _autoEvent = new(false);
+        private readonly int _lifetime;
+        private Timer _aTimer;
+        private bool _done;
+        private bool _running;
         public bool HasEverStated;
-        private int lifetime;
 
         public TimedAction(float lifetime)
         {
-            this.lifetime = (int) (lifetime * 1000);
+            _lifetime = (int) (lifetime * 1000);
         }
 
         public void Start()
         {
             HasEverStated = true;
-            done = false;
-            aTimer = new Timer(OnTimedEvent, autoEvent, lifetime, 0);
+            _running = true;
+            _done = false;
+            _aTimer = new Timer(OnTimedEvent, _autoEvent, _lifetime, 0);
         }
+
 
         public void TurnOff()
         {
-            done = false;
+            _done = false;
+            _running = false;
         }
 
         private void OnTimedEvent(object state)
         {
-            done = true;
-            aTimer.Dispose();
+            _done = true;
+            _running = false;
+            _aTimer.Dispose();
+        }
+
+        public bool IsRunning()
+        {
+            return _running;
         }
 
         public bool TrueDone()
         {
-            return done;
+            return _done;
         }
     }
 }

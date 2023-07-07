@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -106,7 +107,7 @@ public class GreyOutAddBotButtonIfNotHostPatch
         return true;
     }
 
-    static void GreyOutLabel(PlayMenuController __instance)
+    public static void GreyOutLabel(PlayMenuController __instance)
     {
         var addBot = typeof(PlayMenuController).GetField("addBot", BindingFlags.Instance | BindingFlags.NonPublic);
         var disabledColor =
@@ -138,13 +139,24 @@ public class DisableAddBotButtonIfNotHostPatch
         return true;
     }
 
-    static void DisableButton(PlayMenuController __instance)
+    public static void DisableButton(PlayMenuController __instance)
     {
         var disabledColor =
             typeof(PlayMenuController).GetField("disabledColor", BindingFlags.Instance | BindingFlags.NonPublic);
         __instance.botToggleLabel.color = (Color32) disabledColor.GetValue(__instance);
 
         GlobalAudio.globalAudio.PlayInvalid();
+    }
+}
+
+[HarmonyPatch(typeof(PlayMenuController), "BackToMainmenu")]
+public class PlayButtonMenuControllerPatches
+{
+    static void Prefix()
+    {
+        Plugin.Logger.LogInfo("Leaving PlayMenu");
+
+        CustomLobbyMenu.Instance.HideLobbyMenu();
     }
 }
 
@@ -211,6 +223,13 @@ public static class ManageMinimenuStatePatch
             }
         }
 
+        ColorNextMiniMenuLabel(__instance);
+
+        return false;
+    }
+
+    public static void ColorNextMiniMenuLabel(PlayMenuController __instance)
+    {
         var disabledColor = (Color32) typeof(PlayMenuController)
             .GetField("disabledColor", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.GetValue(__instance)!;
@@ -231,7 +250,32 @@ public static class ManageMinimenuStatePatch
             __instance.startLabel.color = disabledColor;
             readyToStart.SetValue(__instance, false);
         }
+    }
+}
 
-        return false;
+[HarmonyPatch(typeof(PlayMenuController), nameof(PlayMenuController.ShowStageMenu))]
+public static class GetOutOfStageMenuIfNotHost
+{
+    static void Postfix()
+    {
+        if (LobbyManager.Instance.isHost)
+        {
+            LobbyManager.Instance.CurrentLobby.SetData("GameStopped", string.Empty);
+            return;
+        }
+
+        var smc = Object.FindObjectOfType<StageMenuController>();
+        smc.StartCoroutine(HideTimedStageMenu(smc));
+    }
+
+    static IEnumerator HideTimedStageMenu(StageMenuController smc)
+    {
+        yield return new WaitForSeconds(1f);
+
+        //smc.HideStageMenu(-1);
+        typeof(StageMenuController).GetMethod("HideStageMenu", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(smc, new object[] {-1});
+
+        LobbyManager.Instance.SyncSlotKeys();
     }
 }

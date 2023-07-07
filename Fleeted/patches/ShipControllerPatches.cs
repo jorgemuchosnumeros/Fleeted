@@ -12,6 +12,10 @@ public static class SendShooting
 {
     static void Postfix(ShipController __instance)
     {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
+        Random.InitState(LobbyManager.Instance.seed);
+
         if (!InGameNetManager.IsSlotOwnedByThisClient(__instance.playerN - 1)) return;
 
         var bu = (GameObject) typeof(ShipController).GetField("bu", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -44,6 +48,8 @@ public static class SendEmptyShooting
 {
     static void Postfix(ShipController __instance)
     {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
         if (!InGameNetManager.IsSlotOwnedByThisClient(__instance.playerN - 1)) return;
 
         var spawnProjectilePacket = new SpawnProjectilePacket

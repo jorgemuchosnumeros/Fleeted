@@ -99,7 +99,10 @@ public static class RemovePauseMenuDuringVictory2
     static bool Prefix(ResultsController __instance)
     {
         if (LobbyManager.Instance.isHost)
+        {
             LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
+        }
+
 
         if (LobbyManager.Instance.isHost || HostContinued)
         {
@@ -117,5 +120,33 @@ public static class RemovePauseMenuDuringVictory2
         };
 
         return false;
+    }
+}
+
+[HarmonyPatch(typeof(ResultsController), "Exit")]
+public static class ExitEveryoneIfHostExitsGame
+{
+    private static void Prefix(ResultsController __instance)
+    {
+        var exitConfirmation = (bool) typeof(ResultsController)
+            .GetField("exitConfirmation", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance);
+        var reached = (bool) typeof(ResultsController)
+            .GetField("reached", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance);
+
+        if (!exitConfirmation && !reached) return;
+
+        //__instance.pauseSelectionCooldown = 0.25f;
+        var pauseSelectionCooldown = typeof(ResultsController)
+            .GetField("pauseSelectionCooldown", BindingFlags.Instance | BindingFlags.NonPublic);
+        pauseSelectionCooldown.SetValue(__instance, 0.25f);
+
+        if (LobbyManager.Instance.isHost)
+        {
+            LobbyManager.Instance.CurrentLobby.SetData("GameStopped", "yes");
+            LobbyManager.Instance.CurrentLobby.SetData("GameStarted", string.Empty);
+        }
+
+        InGameNetManager.Instance.AbandonConnection();
+        InGameNetManager.Instance.StopClient();
     }
 }

@@ -2,12 +2,15 @@ using System;
 using System.Reflection;
 using Fleeted.packets;
 using Fleeted.patches;
+using Fleeted.utils;
 using UnityEngine;
 
 namespace Fleeted;
 
 public class NetShipController : MonoBehaviour
 {
+    public readonly TimedAction CollisionDisable = new(1f / 2);
+
     private bool _alreadyDead;
     private bool _alreadyShot;
     private ShipColliderController _ccollider;
@@ -44,15 +47,17 @@ public class NetShipController : MonoBehaviour
         {
             case PacketType.ShipUpdate:
             {
+                if (CollisionDisable.IsRunning()) break;
+
                 _rb.velocity = _latestSPacket.Velocity;
 
                 var posDiscrepancy = (new Vector2(transform.position.x, transform.position.y) - _latestSPacket.Position)
                     .sqrMagnitude;
-                if (posDiscrepancy > 2f)
+                if (posDiscrepancy > 4f)
                 {
                     transform.position = _latestSPacket.Position;
                 }
-                else if (posDiscrepancy > 0.2f)
+                else if (posDiscrepancy > 0.4f)
                 {
                     transform.position = Vector2.Lerp(transform.position, _latestSPacket.Position, 6f * Time.deltaTime);
                 }

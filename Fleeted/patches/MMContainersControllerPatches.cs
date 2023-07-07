@@ -1,4 +1,6 @@
-﻿using HarmonyLib;
+﻿using System.Collections;
+using HarmonyLib;
+using UnityEngine;
 
 namespace Fleeted.patches;
 
@@ -25,6 +27,23 @@ public static class HidePlayOnlineMenu
     static void Postfix()
     {
         CustomOnlineMenu.Instance.StartCoroutine(CustomOnlineMenu.Instance.HidePlayOnlineMenu());
+    }
+}
+
+[HarmonyPatch(typeof(MMContainersController), nameof(MMContainersController.ShowPlayMenu))]
+public static class RefreshClientNames
+{
+    static void Postfix()
+    {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
+        CustomLobbyMenu.Instance.StartCoroutine(DelayChangeToSteamNames());
+    }
+
+    static IEnumerator DelayChangeToSteamNames()
+    {
+        yield return new WaitForSeconds(0.5f);
+        CustomLobbyMenu.Instance.ChangeToSteamNames();
     }
 }
 

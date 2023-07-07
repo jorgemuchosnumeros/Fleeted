@@ -42,7 +42,7 @@ public static class SteamworksPatches
         }
 
 #if !GOLDBERG
-        UnityEngine.Object.DontDestroyOnLoad(__instance.gameObject);
+        Object.DontDestroyOnLoad(__instance.gameObject);
         try
         {
             if (SteamClient.RestartAppIfNecessary(1037190u))

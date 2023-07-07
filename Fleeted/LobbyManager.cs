@@ -62,7 +62,7 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    private void SendOwnCharaSelection()
+    public void SendOwnCharaSelection()
     {
         var charas = string.Empty;
 
@@ -405,7 +405,7 @@ public class LobbyManager : MonoBehaviour
             case GlobalController.screens.gamecountdown:
             case GlobalController.screens.gamepause:
             case GlobalController.screens.gameresults:
-                //TODO: Remove Chara Ingame ?
+                //TODO: Remove Chara InGame ?
                 break;
         }
 
@@ -417,6 +417,7 @@ public class LobbyManager : MonoBehaviour
     private void OnLobbyCreated(Result result, Lobby lobby)
     {
         _createLobbyResult = result;
+        lobby.SetData("Creator", SteamClient.SteamId.ToString());
     }
 
     private async void OnLobbyEntered(Lobby lobby)
@@ -512,7 +513,12 @@ public class LobbyManager : MonoBehaviour
         if (isHost) return;
         GetCharaSelection(lobby);
         GetStageSettings(lobby);
-        InGameNetManager.Instance.StartGame(lobby);
+
+        if (lobby.GetData("GameStarted") == "yes")
+            InGameNetManager.Instance.OnStartGame(lobby);
+
+        if (lobby.GetData("GameStopped") == "yes")
+            InGameNetManager.Instance.OnStopGame(lobby);
     }
 
     private void OnLobbyMemberDataChanged(Lobby lobby, Friend friend)
@@ -523,8 +529,13 @@ public class LobbyManager : MonoBehaviour
 
     private void OnLobbyMemberLeave(Lobby lobby, Friend friend)
     {
-        if (CurrentLobby.Owner.Equals(friend) && !isHost)
+        var creator = ulong.Parse(lobby.GetData("Creator"));
+        Plugin.Logger.LogInfo($"{creator} - {friend.Id}");
+
+        if (creator == friend.Id && !isHost)
         {
+            Plugin.Logger.LogInfo("Owner Left");
+
             //PlayMenuController.BackToMainmenu()
             typeof(PlayMenuController).GetMethod("BackToMainmenu", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(PlayMenuController.playMenuController, new object[] { });
@@ -620,6 +631,36 @@ public class LobbyManager : MonoBehaviour
         seed = settings.Seed;
         settingsJson = JsonUtility.ToJson(settings);
         lobby.SetData("GameSettings", settingsJson);
+    }
+
+    public void SyncSlotKeys()
+    {
+        var players = new Dictionary<int, PlayerInfo>();
+        Plugin.Logger.LogInfo("Syncing Lobby Slots");
+        foreach (var data in CurrentLobby.Data)
+        {
+            if (!data.Key.Contains("Slot")) continue;
+            var key = int.Parse(data.Key.Replace("Slot", ""));
+            var player = JsonUtility.FromJson<PlayerInfo>(CurrentLobby.GetData(data.Key));
+
+            if (Players.TryGetValue(key, out var value))
+            {
+                Plugin.Logger.LogInfo(!value.Equals(player)
+                    ? $"Slot {key} not equal to local, correcting"
+                    : $"Slot {key} is fine");
+            }
+            else
+            {
+                Plugin.Logger.LogInfo($"Slot {key} not found, adding it to the players");
+            }
+
+            players.Add(key, player);
+        }
+
+        Players.Clear();
+
+        foreach (var player in players)
+            Players.Add(player.Key, player.Value);
     }
 
     public struct PlayerInfo

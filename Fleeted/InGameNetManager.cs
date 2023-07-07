@@ -26,15 +26,16 @@ public class InGameNetManager : MonoBehaviour
 
     public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
+
+    public int CameraMovementSeed;
     private readonly Stopwatch _pingStopwatch = new();
 
     private readonly Dictionary<int, NetBulletController> bulletControllers = new();
     private readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
-    private readonly Dictionary<int, NetShipController> controllersSlots = new();
+    public readonly Dictionary<int, NetShipController> controllersSlots = new();
     public readonly TimedAction GracePeriod = new(3.5f);
+    private readonly Dictionary<ulong, HashSet<int>> killVoters = new();
     private readonly Dictionary<int, int> killVotes = new();
-    
-    public int CameraMovementSeed;
 
     public readonly TimedAction MainSendTick = new(1.0f / 10);
 
@@ -42,7 +43,7 @@ public class InGameNetManager : MonoBehaviour
     public readonly TimedAction PingSendTick = new(1.0f);
 
     private readonly Dictionary<int, Rigidbody2D> rbBullets = new();
-    private readonly Dictionary<int, Rigidbody2D> rbSlots = new();
+    public readonly Dictionary<int, Rigidbody2D> rbSlots = new();
 
     private bool _isShipReferenceUpdatePending;
 
@@ -131,6 +132,15 @@ public class InGameNetManager : MonoBehaviour
         }
     }
 
+    public void AbandonConnection()
+    {
+        foreach (var id in LobbyManager.Instance.CurrentLobby.Members.Select(member => member.Id).ToList())
+        {
+            Plugin.Logger.LogInfo($"Disconnection from: {id}");
+            SteamNetworking.CloseP2PSessionWithUser(id);
+        }
+    }
+
     public void ResetState()
     {
         MainSendTick.Start();
@@ -146,6 +156,14 @@ public class InGameNetManager : MonoBehaviour
     public void StartClient(bool asHost = false)
     {
         Plugin.Logger.LogInfo($"Starting client {(asHost ? "and server" : string.Empty)}");
+
+        isHost = asHost;
+        isClient = true;
+    }
+
+    public void StopClient(bool asHost = false)
+    {
+        Plugin.Logger.LogInfo($"Stopping client {(asHost ? "and server" : string.Empty)}");
 
         isHost = asHost;
         isClient = true;
@@ -198,6 +216,8 @@ public class InGameNetManager : MonoBehaviour
 
         foreach (var bc in ownedLiveBullets)
         {
+            if (!rbBullets.ContainsKey(bc.GetInstanceID())) continue;
+
             var updateProjectilePacket = new UpdateProjectilePacket()
             {
                 Id = bc.GetInstanceID(),
@@ -220,7 +240,7 @@ public class InGameNetManager : MonoBehaviour
         SendPacket2All(SteamClient.SteamId, data, PacketType.ProjectileUpdate, P2PSend.Unreliable);
     }
 
-    private void SendPingPacket(bool response, ulong sender = 0)
+    private void SendPingPacket(bool response, ulong sender = 0, P2PSend flag = P2PSend.Reliable)
     {
         var pingPacket = new PingPacket()
         {
@@ -237,11 +257,11 @@ public class InGameNetManager : MonoBehaviour
 
         if (response)
         {
-            SendPacketToSomeone(SteamClient.SteamId, sender, data, PacketType.Ping, P2PSend.Unreliable);
+            SendPacketToSomeone(SteamClient.SteamId, sender, data, PacketType.Ping, flag);
         }
         else
         {
-            SendPacket2All(SteamClient.SteamId, data, PacketType.Ping, P2PSend.Unreliable);
+            SendPacket2All(SteamClient.SteamId, data, PacketType.Ping, flag);
             _pingStopwatch.Restart();
         }
     }
@@ -292,16 +312,34 @@ public class InGameNetManager : MonoBehaviour
                 case PacketType.Kill:
                     var killPacket = dataStream.ReadKillPacket();
                     var defendant = killPacket.TargetShip;
+                    var prosecutor = packet.SteamId;
 
                     if (!ownedSlots.Contains(defendant)) break;
 
                     var memberCount = LobbyManager.Instance.CurrentLobby.Members.Count();
                     var voteLimit = memberCount / 2 + 1;
 
-                    if (killVotes.TryGetValue(defendant, out _))
-                        killVotes[defendant]++;
+                    var repeatedVote = false;
+                    if (killVoters.TryGetValue(prosecutor, out _))
+                    {
+                        if (!killVoters[prosecutor].Add(defendant))
+                        {
+                            repeatedVote = true;
+                        }
+                    }
                     else
-                        killVotes.Add(defendant, 1);
+                    {
+                        killVoters.Add(prosecutor, new HashSet<int> {defendant});
+                    }
+
+                    if (!repeatedVote)
+                    {
+                        if (killVotes.TryGetValue(defendant, out _))
+                            killVotes[defendant]++;
+                        else
+                            killVotes.Add(defendant, 1);
+                    }
+
 
                     Plugin.Logger.LogInfo(
                         $"{defendant} is accused of unreliably dying, votes: {killVotes[defendant]}/{memberCount / 2 + 1}");
@@ -311,9 +349,9 @@ public class InGameNetManager : MonoBehaviour
                         var player = LobbyManager.Instance.Players[defendant].InGameShip;
                         var controller = player.GetComponent<ShipController>();
                         var ccontroller = player.GetComponent<ShipColliderController>();
-                            
+
                         Plugin.Logger.LogInfo($"Killed {killPacket.TargetShip} by vote");
-                        
+
                         NetShipController.ExplodeNetShip(killPacket.IsExplosionBig, controller, ccontroller);
                     }
 
@@ -339,7 +377,10 @@ public class InGameNetManager : MonoBehaviour
 
                         Plugin.Logger.LogWarning(projectilePacket == null);
 
-                        bulletControllers[projectilePacket.Id].ReceiveUpdates(projectilePacket);
+                        if (bulletControllers.TryGetValue(projectilePacket.Id, out var bcontroller))
+                        {
+                            bcontroller.ReceiveUpdates(projectilePacket);
+                        }
                     }
 
                     break;
@@ -443,6 +484,7 @@ public class InGameNetManager : MonoBehaviour
         bulletControllers.Clear();
         pingMap.Clear();
         killVotes.Clear();
+        killVoters.Clear();
 
         var ships = GameState.gameState.playerShips;
         for (var i = 0; i < 8; i++)
@@ -463,10 +505,14 @@ public class InGameNetManager : MonoBehaviour
                             : ships[i].AddComponent<NetShipController>());
                 }
 
-                var bullets =
-                    (from object bullet in ships[i].transform.GetChild(8)
-                        select ((Transform) bullet).GetComponent<BulletController>())
-                    .ToDictionary(bulletController => bulletController.GetInstanceID());
+                var bullets = new Dictionary<int, BulletController>();
+                foreach (var bullet in ships[i].transform.GetChild(8))
+                {
+                    if (((Transform) bullet).TryGetComponent<BulletController>(out var bulletController))
+                    {
+                        bullets.Add(bulletController.GetInstanceID(), bulletController);
+                    }
+                }
 
                 foreach (var b in bullets)
                 {
@@ -494,19 +540,17 @@ public class InGameNetManager : MonoBehaviour
         return LobbyManager.Instance.Players[slot].OwnerOfCharaId == SteamClient.SteamId;
     }
 
-    public void StartGame(Lobby lobby)
+    public void OnStartGame(Lobby lobby)
     {
-        if (lobby.GetData("GameStarted") != "yes") return;
-
         Plugin.Logger.LogInfo("Host let us Start");
+
+        SetPlayersPatch.SetPlayers(GameState.gameState);
 
         switch (GlobalController.globalController.screen)
         {
             case GlobalController.screens.playmenu:
             {
                 var smcInstance = FindObjectOfType<StageMenuController>();
-
-                StartClient();
 
                 //smcInstance.StartGame();
                 typeof(StageMenuController).GetMethod("StartGame", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -526,6 +570,26 @@ public class InGameNetManager : MonoBehaviour
         }
     }
 
+    public void OnStopGame(Lobby lobby)
+    {
+        Plugin.Logger.LogInfo("Host Stopping Game");
+
+        switch (GlobalController.globalController.screen)
+        {
+            case GlobalController.screens.gameresults:
+            case GlobalController.screens.gameloading:
+            case GlobalController.screens.gamecountdown:
+            case GlobalController.screens.gamepause:
+            case GlobalController.screens.game:
+                var rcInstance = ResultsController.resultsController;
+                //rcInstance.Exit();
+                typeof(ResultsController).GetMethod("Exit", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(rcInstance, null);
+
+                break;
+        }
+    }
+
     public IEnumerator StartNewNetRound(GameState instance)
     {
         // Wait for everyone to be ready and host decides a date to start the Game,
@@ -539,7 +603,7 @@ public class InGameNetManager : MonoBehaviour
         lobby.SetData("StartTime", string.Empty);
 
         var serverClientTimeDiff = NTP.GetNetworkTime().Ticks - DateTime.UtcNow.Ticks;
-        
+
         while (LobbyManager.Instance.isHost)
         {
             Thread.Sleep(500);
@@ -550,10 +614,14 @@ public class InGameNetManager : MonoBehaviour
                     $"{DateTime.UtcNow.Ticks + serverClientTimeDiff + 50000000L}"); // Give 5 seconds of headstart for the rest to be ready
                 break;
             }
-
         }
 
         yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
+
+        StartClient();
+
+        for (var i = 0; i < 10; i++) // Warm up the connection ???
+            SendPingPacket(false, flag: P2PSend.Unreliable);
 
         Plugin.Logger.LogInfo($"Current Time: {DateTime.UtcNow.Ticks + serverClientTimeDiff}");
         var startTime = lobby.GetData("StartTime");

@@ -12,10 +12,26 @@ public static class GetLastCollisionTypePatch
     public static bool IsLastCollisionABullet;
     public static Collision2D LastCollision;
 
-    static void Prefix(Collision2D collision)
+    static void Prefix(ShipColliderController __instance, Collision2D collision)
     {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
+        Random.InitState(LobbyManager.Instance.seed);
+
         IsLastCollisionABullet = collision.transform.CompareTag("Bullet");
         LastCollision = collision;
+
+        if (collision.transform.CompareTag("Player"))
+        {
+            var colliderSlot = __instance.GetComponent<ShipController>().playerN - 1;
+            var collidedSlot = collision.transform.GetComponent<ShipController>().playerN - 1;
+            if (InGameNetManager.IsSlotOwnedByThisClient(colliderSlot) &&
+                !InGameNetManager.IsSlotOwnedByThisClient(collidedSlot))
+            {
+                Plugin.Logger.LogInfo($"Colliding with {collidedSlot}");
+                InGameNetManager.Instance.controllersSlots[collidedSlot].CollisionDisable.Start();
+            }
+        }
     }
 }
 

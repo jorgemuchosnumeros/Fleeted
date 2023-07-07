@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using Fleeted.patches;
 using Fleeted.utils;
 using Steamworks;
 using TMPro;
@@ -32,6 +33,8 @@ public class CustomLobbyMenu : MonoBehaviour
     private Color _prevInfoColor;
     private string _prevInfoText;
 
+    private TimedAction steamNamesChange = new(3f);
+
     private void Awake()
     {
         Instance = this;
@@ -40,6 +43,23 @@ public class CustomLobbyMenu : MonoBehaviour
         copySprite = SpritesExtra.SpriteFromName("Fleeted.assets.copy_icon.png");
         eyeSprite = SpritesExtra.SpriteFromName("Fleeted.assets.eye_icon.png");
         pointSprite = SpritesExtra.SpriteFromName("Fleeted.assets.dot.png");
+    }
+
+    private void Start()
+    {
+        steamNamesChange.Start();
+    }
+
+    private void Update()
+    {
+        if (GlobalController.globalController.screen != GlobalController.screens.playmenu) return;
+
+        Cursor.visible = true;
+        if (steamNamesChange.TrueDone() && ApplyPlayOnlinePatch.IsOnlineOptionSelected)
+        {
+            ChangeToSteamNames();
+            steamNamesChange.Start();
+        }
     }
 
     public void MapLobby()
@@ -81,7 +101,6 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public void HideLobbyMenu()
     {
-        // TODO: Abandon Connection
         InGameNetManager.Instance.ResetState();
 
         LobbyManager.Instance.CurrentLobby.Leave();
@@ -140,6 +159,8 @@ public class CustomLobbyMenu : MonoBehaviour
             if (playerBoxes[i].activeSelf == false) continue;
 
             var playerBox = playerBoxes[i];
+
+            if (!players.ContainsKey(i)) continue;
 
             var playerName = new Friend(players[i].OwnerOfCharaId).Name;
             var charaName = playerBox.transform.GetChild(4).GetChild(0);

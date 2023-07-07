@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -117,24 +116,12 @@ public static class SetPlayersPatch
 {
     static bool Prefix(GameState __instance, bool[] pl, int[] chara, bool[] bots1)
     {
-        for (var i = 0; i < pl.Length; i++)
-        {
-            try
-            {
-                Plugin.Logger.LogInfo($"Occupied: {pl[i]}, Chara: {chara[i]}, isBot: {bots1[i]}");
-            }
-            catch (IndexOutOfRangeException)
-            {
-                Plugin.Logger.LogError($"Player slot {i} is unavailable!");
-            }
-        }
-
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
-        SetPlayers(__instance, pl, chara, bots1);
+        SetPlayers(__instance);
         return false;
     }
 
-    static void SetPlayers(GameState instance, bool[] pl, int[] chara, bool[] bots1)
+    public static void SetPlayers(GameState instance)
     {
         var shipCustomizations =
             typeof(GameState).GetField("shipCustomizations", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -150,20 +137,23 @@ public static class SetPlayersPatch
 
         for (var i = 0; i < 8; i++)
         {
-            try
+            if (netPlayers.ContainsKey(i))
             {
                 instance.activePlayers[i] = true;
                 instance.charas[i] = netPlayers[i].Chara + 1;
                 instance.bots[i] = netPlayers[i].IsBot;
+                Plugin.Logger.LogInfo($"Net Chara: {netPlayers[i].Chara + 1}");
             }
-            catch (KeyNotFoundException)
+            else
             {
                 instance.activePlayers[i] = false;
                 instance.charas[i] = 1;
                 instance.bots[i] = false;
             }
-        }
 
+            Plugin.Logger.LogInfo(
+                $"Occupied: {instance.activePlayers[i]}, Chara: {instance.charas[i]}, isBot: {instance.bots[i]}");
+        }
 
         shipCustomizations.SetValue(instance, new ShipCustomization[8]);
         instance.shipCharacter = new ShipCharacter[8];

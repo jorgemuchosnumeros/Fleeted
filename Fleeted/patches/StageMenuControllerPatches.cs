@@ -7,8 +7,11 @@ public static class HideStageMenuPatch
 {
     static void Postfix()
     {
-        if (ApplyPlayOnlinePatch.IsOnlineOptionSelected)
-            CustomLobbyMenu.Instance.StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0.25f));
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
+        LobbyManager.Instance.SendOwnCharaSelection();
+
+        CustomLobbyMenu.Instance.StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0.25f));
     }
 }
 
