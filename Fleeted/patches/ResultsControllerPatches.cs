@@ -1,6 +1,8 @@
+using System;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace Fleeted.patches;
 
@@ -101,6 +103,8 @@ public static class RemovePauseMenuDuringVictory2
         if (LobbyManager.Instance.isHost)
         {
             LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
+            LobbyManager.Instance.UpdateSeed(LobbyManager.Instance.CurrentLobby,
+                (int) DateTimeOffset.Now.Ticks);
         }
 
 

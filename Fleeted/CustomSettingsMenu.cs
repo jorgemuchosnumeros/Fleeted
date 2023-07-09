@@ -143,6 +143,8 @@ public class CustomSettingsMenu : MonoBehaviour
     {
         yield return new WaitForSeconds(0.2f);
 
+        if (GlobalController.globalController.screen != GlobalController.screens.optionsmenu) yield break;
+
         moveOptions = false;
 
         CustomOnlineMenu.Instance.ShowPlayOnlineMenu();

@@ -63,6 +63,10 @@ namespace Fleeted
                 var inGameNetManager = new GameObject("InGameNetManager");
                 inGameNetManager.AddComponent<InGameNetManager>();
                 DontDestroyOnLoad(inGameNetManager);
+
+                var discordIntegration = new GameObject("DiscordIntegration");
+                discordIntegration.AddComponent<DiscordIntegration>();
+                DontDestroyOnLoad(discordIntegration);
             }
         }
 

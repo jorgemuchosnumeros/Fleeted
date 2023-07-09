@@ -24,6 +24,7 @@ public class InGameNetManager : MonoBehaviour
     public bool isHost;
     public bool isClient;
 
+
     public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
 
@@ -50,6 +51,16 @@ public class InGameNetManager : MonoBehaviour
     private Dictionary<PacketType, int> _specificBytesOut = new();
 
     public HashSet<BulletController> ownedLiveBullets = new();
+
+    public bool inGame => GlobalController.globalController.screen switch
+    {
+        GlobalController.screens.gameresults => true,
+        GlobalController.screens.gameloading => true,
+        GlobalController.screens.gamecountdown => true,
+        GlobalController.screens.gamepause => true,
+        GlobalController.screens.game => true,
+        _ => false,
+    };
 
     private void Awake()
     {
@@ -297,7 +308,7 @@ public class InGameNetManager : MonoBehaviour
                     {
                         if (ownedSlots.Contains(shipPacket.Slot)) break;
 
-                        controllersSlots[shipPacket.Slot].ReceiveUpdates(shipPacket, PacketType.ShipUpdate);
+                        controllersSlots[shipPacket.Slot].UpdatePosition(shipPacket, PacketType.ShipUpdate);
                     }
 
                     break;
@@ -307,7 +318,7 @@ public class InGameNetManager : MonoBehaviour
 
                     if (ownedSlots.Contains(target)) break;
 
-                    controllersSlots[target].ReceiveUpdates(deathPacket, PacketType.Death);
+                    controllersSlots[target].Explode(deathPacket);
                     break;
                 case PacketType.Kill:
                     var killPacket = dataStream.ReadKillPacket();
@@ -364,7 +375,7 @@ public class InGameNetManager : MonoBehaviour
 
                     if (controllersSlots.TryGetValue(slot, out var sppc))
                     {
-                        sppc.ReceiveUpdates(spawnProjectilePacket, PacketType.SpawnProjectile);
+                        sppc.SpawnProjectile(spawnProjectilePacket);
                     }
 
                     break;

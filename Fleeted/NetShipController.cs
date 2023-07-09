@@ -1,4 +1,3 @@
-using System;
 using System.Reflection;
 using Fleeted.packets;
 using Fleeted.patches;
@@ -11,17 +10,13 @@ public class NetShipController : MonoBehaviour
 {
     public readonly TimedAction CollisionDisable = new(1f / 2);
 
-    private bool _alreadyDead;
-    private bool _alreadyShot;
     private ShipColliderController _ccollider;
     private ShipController _controller;
-    private DeathPacket _latestDPacket;
     private PacketType _latestID;
-    private SpawnProjectilePacket _latestPSPacket;
 
     private ShipPacket _latestSPacket;
-
     private Rigidbody2D _rb;
+
 
     private void Awake()
     {
@@ -70,38 +65,6 @@ public class NetShipController : MonoBehaviour
                     Quaternion.Euler(new Vector3(0, 0, _latestSPacket.Rotation)), 10f * Time.deltaTime);
                 break;
             }
-            case PacketType.Death:
-                if (_alreadyDead) break;
-
-                _alreadyDead = true;
-
-                Plugin.Logger.LogInfo(
-                    $"Received death from {_latestDPacket.TargetShip} by {_latestDPacket.SourceShip}");
-
-                ExplodeNetShip(_latestDPacket.IsExplosionBig, _controller, _ccollider);
-
-                break;
-            case PacketType.SpawnProjectile:
-                if (_alreadyShot) break;
-
-                if (!_latestPSPacket.IsEmpty)
-                {
-                    //_controller.Shoot();
-                    typeof(ShipController).GetMethod("Shoot", BindingFlags.Instance | BindingFlags.NonPublic)
-                        .Invoke(_controller, null);
-                }
-                else
-                {
-                    //_controller.ShootEmpty();
-                    typeof(ShipController).GetMethod("ShootEmpty", BindingFlags.Instance | BindingFlags.NonPublic)
-                        .Invoke(_controller, null);
-                }
-
-                _alreadyShot = true;
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
         }
     }
 
@@ -130,23 +93,33 @@ public class NetShipController : MonoBehaviour
         }
     }
 
-    public void ReceiveUpdates(ShipPacket packet, PacketType id)
+    public void UpdatePosition(ShipPacket packet, PacketType id)
     {
         _latestSPacket = packet;
         _latestID = id;
     }
 
-    public void ReceiveUpdates(SpawnProjectilePacket packet, PacketType id)
+    public void SpawnProjectile(SpawnProjectilePacket packet)
     {
-        _alreadyShot = false;
-        _latestPSPacket = packet;
-        _latestID = id;
+        if (!packet.IsEmpty)
+        {
+            //_controller.Shoot();
+            typeof(ShipController).GetMethod("Shoot", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(_controller, null);
+        }
+        else
+        {
+            //_controller.ShootEmpty();
+            typeof(ShipController).GetMethod("ShootEmpty", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(_controller, null);
+        }
     }
 
-    public void ReceiveUpdates(DeathPacket packet, PacketType id)
+    public void Explode(DeathPacket packet)
     {
-        _alreadyDead = false;
-        _latestDPacket = packet;
-        _latestID = id;
+        Plugin.Logger.LogInfo(
+            $"Received death from {packet.TargetShip} by {packet.SourceShip}");
+
+        ExplodeNetShip(packet.IsExplosionBig, _controller, _ccollider);
     }
 }

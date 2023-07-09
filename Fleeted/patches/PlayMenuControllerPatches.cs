@@ -152,10 +152,9 @@ public class DisableAddBotButtonIfNotHostPatch
 [HarmonyPatch(typeof(PlayMenuController), "BackToMainmenu")]
 public class PlayButtonMenuControllerPatches
 {
-    static void Prefix()
+    static void Prefix(PlayMenuController __instance)
     {
-        Plugin.Logger.LogInfo("Leaving PlayMenu");
-
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
         CustomLobbyMenu.Instance.HideLobbyMenu();
     }
 }

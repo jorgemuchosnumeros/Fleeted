@@ -6,13 +6,12 @@ namespace Fleeted;
 
 public class CustomPlayMenuButtons : MonoBehaviour
 {
+    public const float x = 0.027f;
     public GameObject copyBg;
     public GameObject copyIcon;
     public GameObject eyeBg;
     public GameObject eyeIcon;
     public GameObject arrowsGroup;
-
-    public float x = 0.027f;
     private readonly GameObject[] _arrowsRoomCode = new GameObject[6];
 
     private Camera _renderCamera;
@@ -131,7 +130,9 @@ public class CustomPlayMenuButtons : MonoBehaviour
 
     private void UpdateArrows()
     {
-        var arrows = LobbyManager.Instance.joinArrowCode;
+        var arrows = LobbyManager.Instance.CurrentLobby.GetData("ArrowCode");
+        LobbyManager.Instance.joinArrowCode = arrows;
+
         int line = 0;
         foreach (var arrow in arrows)
         {

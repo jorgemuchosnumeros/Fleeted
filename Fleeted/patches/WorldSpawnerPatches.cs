@@ -1,6 +1,6 @@
+using System;
 using HarmonyLib;
-using Steamworks;
-using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace Fleeted.patches;
 
@@ -179,6 +179,6 @@ public static class CameraControllerSyncPatch
     {
         if (LobbyManager.Instance.isHost)
             LobbyManager.Instance.UpdateSeed(LobbyManager.Instance.CurrentLobby,
-                (int) SteamUtils.SteamServerTime.Ticks);
+                (int) DateTimeOffset.Now.Ticks);
     }
 }

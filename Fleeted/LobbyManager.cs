@@ -1,4 +1,4 @@
-﻿#define GOLDBERG
+﻿#undef GOLDBERG
 
 using System;
 using System.Collections;
@@ -18,6 +18,7 @@ public class LobbyManager : MonoBehaviour
     public static LobbyManager Instance;
 
     public bool isHost;
+    public bool inLobby;
     public bool isLoadingLock;
     public bool hostOptions = true;
 
@@ -42,6 +43,8 @@ public class LobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyDataChanged += OnLobbyDataChanged;
         SteamMatchmaking.OnLobbyMemberDataChanged += OnLobbyMemberDataChanged;
         SteamMatchmaking.OnLobbyMemberLeave += OnLobbyMemberLeave;
+
+        SteamFriends.OnGameLobbyJoinRequested += OnGameLobbyJoinRequested;
     }
 
     private void Update()
@@ -422,6 +425,7 @@ public class LobbyManager : MonoBehaviour
 
     private async void OnLobbyEntered(Lobby lobby)
     {
+        inLobby = true;
         isLoadingLock = false;
         if (_createLobbyResult != Result.None)
         {
@@ -439,13 +443,15 @@ public class LobbyManager : MonoBehaviour
                 var body = await WebRequestExtra.GetBodyFromWebRequest($"http://127.0.0.1:3001/setLobby?id={lobby.Id}");
 #else
                 var body =
- await WebRequestExtra.GetBodyFromWebRequest($"https://u.antonioma.com/fleeted/setLobby.php?id={lobby.Id}");
+                    await WebRequestExtra.GetBodyFromWebRequest(
+                        $"https://u.antonioma.com/fleeted/setLobby.php?id={lobby.Id}");
 #endif
                 CustomLobbyMenu.Instance.infoTMP.text = "Press a Button to Join and wait for other players";
                 joinArrowCode = body;
                 Plugin.Logger.LogInfo($"Received Arrow Code: {body}");
                 Plugin.Logger.LogInfo($"Created Lobby: {lobby.Id}");
                 isHost = true;
+                lobby.SetData("ArrowCode", joinArrowCode);
             }
             catch (Exception ex)
             {
@@ -464,7 +470,7 @@ public class LobbyManager : MonoBehaviour
         {
             _createLobbyResult = Result.None;
             lobby.SetJoinable(true);
-            lobby.SetPrivate();
+            lobby.SetFriendsOnly();
         }
         else
         {
@@ -489,6 +495,7 @@ public class LobbyManager : MonoBehaviour
         }
 
         CurrentLobby = lobby;
+
 
         StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0f));
 
@@ -529,10 +536,12 @@ public class LobbyManager : MonoBehaviour
 
     private void OnLobbyMemberLeave(Lobby lobby, Friend friend)
     {
-        var creator = ulong.Parse(lobby.GetData("Creator"));
-        Plugin.Logger.LogInfo($"{creator} - {friend.Id}");
+        if (SteamClient.SteamId == friend.Id)
+            inLobby = false;
 
-        if (creator == friend.Id && !isHost)
+        var creator = ulong.Parse(lobby.GetData("Creator"));
+
+        if (creator == friend.Id && creator != SteamClient.SteamId && !isHost)
         {
             Plugin.Logger.LogInfo("Owner Left");
 
@@ -543,6 +552,8 @@ public class LobbyManager : MonoBehaviour
             //PlayMenuController.PlayCancel();
             typeof(PlayMenuController).GetMethod("PlayCancel", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(PlayMenuController.playMenuController, new object[] { });
+
+            GlobalController.globalController.screen = GlobalController.screens.mainmenu;
         }
         else
         {
@@ -556,6 +567,13 @@ public class LobbyManager : MonoBehaviour
                     CurrentLobby.SetData($"Slot{i}", string.Empty);
             }
         }
+    }
+
+    private void OnGameLobbyJoinRequested(Lobby lobby, SteamId steamId)
+    {
+        Plugin.Logger.LogInfo($"Accepting Invite from {steamId}");
+
+        StartCoroutine(CustomLobbyMenu.Instance.TransitionToLobby(lobby.Id));
     }
 
     public async void JoinByArrows(Arrows[] input)
@@ -594,7 +612,8 @@ public class LobbyManager : MonoBehaviour
         var body = await WebRequestExtra.GetBodyFromWebRequest("http://127.0.0.1:3001/getLobby?id=UUDDLR");
 #else
         var body =
- await WebRequestExtra.GetBodyFromWebRequest($"https://u.antonioma.com/fleeted/getLobby.php?code={joinArrowCode}");
+            await WebRequestExtra.GetBodyFromWebRequest(
+                $"https://u.antonioma.com/fleeted/getLobby.php?code={joinArrowCode}");
 #endif
         if (ulong.TryParse(body, out ulong id))
         {
