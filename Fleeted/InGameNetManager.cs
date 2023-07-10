@@ -48,8 +48,6 @@ public class InGameNetManager : MonoBehaviour
 
     private bool _isShipReferenceUpdatePending;
 
-    private Dictionary<PacketType, int> _specificBytesOut = new();
-
     public HashSet<BulletController> ownedLiveBullets = new();
 
     public bool inGame => GlobalController.globalController.screen switch
@@ -308,7 +306,10 @@ public class InGameNetManager : MonoBehaviour
                     {
                         if (ownedSlots.Contains(shipPacket.Slot)) break;
 
-                        controllersSlots[shipPacket.Slot].UpdatePosition(shipPacket, PacketType.ShipUpdate);
+                        if (controllersSlots.TryGetValue(shipPacket.Slot, out var controller))
+                            controller.UpdatePosition(shipPacket, PacketType.ShipUpdate);
+                        else
+                            Plugin.Logger.LogError($"{shipPacket.Slot} not found");
                     }
 
                     break;
@@ -444,14 +445,7 @@ public class InGameNetManager : MonoBehaviour
 
         var packetData = packetStream.ToArray();
 
-        if (_specificBytesOut.ContainsKey(type))
-            _specificBytesOut[type] += packetData.Length;
-        else
-            _specificBytesOut[type] = packetData.Length;
-
-        var lobby = LobbyManager.Instance.CurrentLobby;
-
-        foreach (var member in lobby.Members)
+        foreach (var member in LobbyManager.Instance.CurrentLobby.Members)
         {
             SteamNetworking.SendP2PPacket(member.Id, packetData, packetData.Length, 0, sendFlags);
         }

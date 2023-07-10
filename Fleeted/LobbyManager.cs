@@ -1,4 +1,4 @@
-﻿#undef GOLDBERG
+﻿#define GOLDBERG
 
 using System;
 using System.Collections;
@@ -257,7 +257,7 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    private void GetStageSettings(Lobby lobby)
+    private void SetStageSettings(Lobby lobby)
     {
         var smcInstance = FindObjectOfType<StageMenuController>();
 
@@ -269,21 +269,27 @@ public class LobbyManager : MonoBehaviour
             //modeSelection = Settings.Mode;
             typeof(StageMenuController)
                 .GetField("modeSelection", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(smcInstance, Settings.Mode);
+                ?.SetValue(smcInstance, (int) Settings.Mode);
+
+            GlobalController.globalController.stageSettings[0] = (int) Settings.Mode;
 
             //stageSelection = Settings.Stage;
             typeof(StageMenuController)
                 .GetField("stageSelection", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(smcInstance, Settings.Stage);
+                ?.SetValue(smcInstance, (int) Settings.Stage);
+
+            GlobalController.globalController.stageSettings[1] = (int) Settings.Stage;
 
             //pointsSelection = Settings.Points;
             typeof(StageMenuController)
                 .GetField("pointsSelection", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?.SetValue(smcInstance, Settings.Points);
+
+            GlobalController.globalController.stageSettings[2] = Settings.Points;
         }
-        catch (Exception)
+        catch
         {
-            Plugin.Logger.LogInfo("Receiving a possible Seed Update");
+            // Receiving possibly only a Seed Update
         }
 
         seed = Settings.Seed;
@@ -519,7 +525,7 @@ public class LobbyManager : MonoBehaviour
     {
         if (isHost) return;
         GetCharaSelection(lobby);
-        GetStageSettings(lobby);
+        SetStageSettings(lobby);
 
         if (lobby.GetData("GameStarted") == "yes")
             InGameNetManager.Instance.OnStartGame(lobby);

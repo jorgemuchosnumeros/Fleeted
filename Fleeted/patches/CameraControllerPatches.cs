@@ -101,7 +101,7 @@ public static class ManageCameraEvenInPause1
         GameObject[] array = GameObject.FindGameObjectsWithTag("Player");
 
         //leaderPlayer = GameState.gameState.leaderPlayer;
-        leaderPlayer.SetValue(instance, leaderPlayer);
+        leaderPlayer.SetValue(instance, GameState.gameState.leaderPlayer);
 
         for (int i = 0; i < array.Length; i++)
         {
@@ -112,7 +112,7 @@ public static class ManageCameraEvenInPause1
                 leaderShip.SetValue(instance, array[i]);
 
                 //leaderShipT = leaderShip.transform;
-                leaderShipT.SetValue(instance, leaderShip.GetValue(instance));
+                leaderShipT.SetValue(instance, ((GameObject) leaderShip.GetValue(instance)).transform);
 
                 break;
             }
@@ -121,7 +121,7 @@ public static class ManageCameraEvenInPause1
         if (GlobalController.globalController.screen == GlobalController.screens.game ||
             GlobalController.globalController.screen == GlobalController.screens.gamepause)
         {
-            instance.leaderMarkSR.color = (Color) movingLeaderStarColor.GetValue(instance);
+            instance.leaderMarkSR.color = (Color32) movingLeaderStarColor.GetValue(instance);
         }
 
         //centeringOnLeaderTimer = 0f;
@@ -139,7 +139,7 @@ public static class ManageCameraEvenInPause1
         }
 
         //previousCameraPosition = camT.position;
-        previousCameraPosition.SetValue(instance, instance.camT.position);
+        previousCameraPosition.SetValue(instance, (Vector2) instance.camT.position);
     }
 }
 
@@ -210,7 +210,6 @@ public static class ManageCameraEvenInPause4
 }
 
 // Testing
-/*
 [HarmonyPatch(typeof(CameraController), "Move")]
 public static class NoCameraMovementTest0
 {
@@ -228,4 +227,3 @@ public static class NoCameraMovementTest1
         return false;
     }
 }
-*/
