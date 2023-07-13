@@ -19,27 +19,30 @@ public class NetBulletController : MonoBehaviour
 
     private void Update()
     {
+        if (GlobalController.globalController.screen != GlobalController.screens.game)
+        {
+            Plugin.Logger.LogInfo("Exploding Bullet that is not moving");
+            Explode();
+        }
+
         if (_latestSPacket == null) return;
 
         var posDiscrepancy = (new Vector2(transform.position.x, transform.position.y) - _latestSPacket.Position)
             .sqrMagnitude;
 
+        var predictedPosition = _latestSPacket.Position;
+        if (InGameNetManager.Instance.pingMap.TryGetValue(
+                LobbyManager.Instance.Players[_bcontroller.player - 1].OwnerOfCharaId, out var ping))
+        {
+            predictedPosition =
+                NetShipController.PredictObjectPosition(_latestSPacket.Position, _latestSPacket.Velocity, ping / 1000f);
+        }
 
         _rb.velocity = _latestSPacket.Velocity;
 
         if (posDiscrepancy > 2f)
         {
-            Plugin.Logger.LogInfo($"Correcting position discrepancy of bullet {GetInstanceID()} {posDiscrepancy}");
-            transform.position = Vector2.Lerp(transform.position, _latestSPacket.Position, 6f * Time.deltaTime);
-        }
-    }
-
-    private void FixedUpdate()
-    {
-        if (_rb.velocity.sqrMagnitude <= 0.2f)
-        {
-            Plugin.Logger.LogInfo("Exploding Bullet that is not moving");
-            Explode();
+            transform.position = Vector2.Lerp(transform.position, predictedPosition, 6f * Time.deltaTime);
         }
     }
 

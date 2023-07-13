@@ -8,11 +8,12 @@ namespace Fleeted;
 
 public class NetShipController : MonoBehaviour
 {
-    public readonly TimedAction CollisionDisable = new(1f / 2);
+    const int Steps = 20;
+    public readonly TimedAction CollisionDisable = new(0.075f);
 
     private ShipColliderController _ccollider;
     private ShipController _controller;
-    private PacketType _latestID;
+    private GameObject[] _debugTrajectoryPoints = new GameObject[Steps];
 
     private ShipPacket _latestSPacket;
     private Rigidbody2D _rb;
@@ -38,37 +39,98 @@ public class NetShipController : MonoBehaviour
 
         if (!InGameNetManager.Instance.GracePeriod.TrueDone()) return;
 
-        switch (_latestID)
+        if (CollisionDisable.IsRunning()) return;
+
+        var predictedPosition = _latestSPacket.Position;
+
+        if (InGameNetManager.Instance.pingMap.TryGetValue(
+                LobbyManager.Instance.Players[_controller.playerN - 1].OwnerOfCharaId, out var ping))
         {
-            case PacketType.ShipUpdate:
+            //DebugPredict(ping);
+            predictedPosition = PredictObjectPosition(_latestSPacket.Position, _latestSPacket.Velocity, ping / 1000f,
+                _latestSPacket.StickRotation);
+        }
+
+        _rb.velocity = _latestSPacket.Velocity;
+        var posDiscrepancy =
+            (new Vector2(transform.position.x, transform.position.y) -
+             predictedPosition) //_latestSPacket.Position change
+            .sqrMagnitude;
+        if (posDiscrepancy > 10f)
+        {
+            transform.position = predictedPosition;
+        }
+        else if (posDiscrepancy > 0.2f)
+        {
+            transform.position = Vector2.Lerp(transform.position, predictedPosition, 6f * Time.deltaTime);
+        }
+
+        var stick = transform.GetChild(2).GetChild(2);
+        stick.localRotation = Quaternion.Slerp(stick.localRotation,
+            Quaternion.Euler(new Vector3(0, 0, _latestSPacket.StickRotation)), 3f * Time.deltaTime);
+
+        transform.rotation = Quaternion.Slerp(transform.rotation,
+            Quaternion.Euler(new Vector3(0, 0, _latestSPacket.Rotation)), 10f * Time.deltaTime);
+    }
+
+    private void DebugPredict(long ping)
+    {
+        for (var i = 0; i < Steps; i++)
+        {
+            if (_debugTrajectoryPoints[i] == null)
             {
-                if (CollisionDisable.IsRunning()) break;
+                _debugTrajectoryPoints[i] = new GameObject($"Debug Point{i}");
+                var spriteRenderer = _debugTrajectoryPoints[i].AddComponent<SpriteRenderer>();
 
-                _rb.velocity = _latestSPacket.Velocity;
-
-                var posDiscrepancy = (new Vector2(transform.position.x, transform.position.y) - _latestSPacket.Position)
-                    .sqrMagnitude;
-                if (posDiscrepancy > 4f)
-                {
-                    transform.position = _latestSPacket.Position;
-                }
-                else if (posDiscrepancy > 0.4f)
-                {
-                    transform.position = Vector2.Lerp(transform.position, _latestSPacket.Position, 6f * Time.deltaTime);
-                }
-
-                var stick = transform.GetChild(2).GetChild(2);
-                stick.localRotation = Quaternion.Slerp(stick.localRotation,
-                    Quaternion.Euler(new Vector3(0, 0, _latestSPacket.StickRotation)), 3f * Time.deltaTime);
-
-                transform.rotation = Quaternion.Slerp(transform.rotation,
-                    Quaternion.Euler(new Vector3(0, 0, _latestSPacket.Rotation)), 10f * Time.deltaTime);
-                break;
+                spriteRenderer.sprite = CustomLobbyMenu.Instance.pointSprite;
+                spriteRenderer.color = Color.green;
+                spriteRenderer.sortingOrder = 9999;
             }
+
+            _debugTrajectoryPoints[i].transform.localScale = Vector2.one * 0.5f;
+            _debugTrajectoryPoints[i].transform.position = PredictObjectPosition(_latestSPacket.Position,
+                                                               _latestSPacket.Velocity, _latestSPacket.StickRotation,
+                                                               i * (ping / 100f) / Steps) +
+                                                           new Vector2(-1.3f, -1.15f);
         }
     }
 
-    public static void ExplodeNetShip(bool big, ShipController controller, ShipColliderController ccontroller)
+    public static Vector2 PredictObjectPosition(Vector2 receivedPos, Vector2 receivedVel, float rttSecs,
+        float stickDeg = 0)
+    {
+        if (rttSecs > 0.35f) // Don't Bother on predicting if latency is this big, it's probably going to go way too wrong
+            return receivedPos;
+
+        var perceivedLatencySecs = rttSecs / 2;
+
+        return receivedPos + receivedVel * perceivedLatencySecs;
+
+        // TODO: Predict Circular Movement (Pain)
+        /*
+        if (Mathf.Abs(stickDeg) < 5) // Assume its trajectory is straight
+            return receivedPos + receivedVel * perceivedLatencySecs;
+        
+        var latencyFactor = perceivedLatencySecs * 4f;
+        var rotationStickFactor = (stickDeg > 180 ? stickDeg - 360 : stickDeg) / 750f;
+        
+        var rotationReciprocal = 1 / rotationStickFactor;
+
+        var rRev = rotationReciprocal < 0 ? -1 : 1;
+
+        var invertedRotationReciprocalAbsSqrt = rRev * Mathf.Sqrt(Mathf.Abs(rotationReciprocal));
+        var velPosAtan = (Mathf.Atan2(receivedVel.y - receivedPos.y, receivedVel.x - receivedPos.x) * Mathf.Rad2Deg + 90);
+
+        var rotFx = receivedPos.x + invertedRotationReciprocalAbsSqrt * Mathf.Cos(velPosAtan);
+        var rotFy = receivedPos.y + invertedRotationReciprocalAbsSqrt * Mathf.Sin(velPosAtan);
+
+        var predX = rotFx + invertedRotationReciprocalAbsSqrt * Mathf.Cos(rRev * latencyFactor + velPosAtan + 180);
+        var predY = rotFy + invertedRotationReciprocalAbsSqrt * Mathf.Sin(rRev * latencyFactor + velPosAtan + 180);
+
+        return new Vector2(predX, predY);
+        */
+    }
+
+    public static void ExplodeNetShip(bool big, ShipController controller, ShipColliderController colliderController)
     {
         if (big)
         {
@@ -77,18 +139,18 @@ public class NetShipController : MonoBehaviour
                 SendExplode.PermissionToDie = true;
                 typeof(ShipColliderController)
                     .GetMethod("ExplodeBig", BindingFlags.Instance | BindingFlags.NonPublic)
-                    .Invoke(ccontroller, null);
+                    .Invoke(colliderController, null);
             }
         }
         else
         {
             var exploded = (bool) typeof(ShipColliderController)
-                .GetField("exploded", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ccontroller);
+                .GetField("exploded", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(colliderController);
 
             if (!exploded)
             {
                 SendExplode.PermissionToDie = true;
-                ccontroller.Explode();
+                colliderController.Explode();
             }
         }
     }
@@ -96,7 +158,6 @@ public class NetShipController : MonoBehaviour
     public void UpdatePosition(ShipPacket packet, PacketType id)
     {
         _latestSPacket = packet;
-        _latestID = id;
     }
 
     public void SpawnProjectile(SpawnProjectilePacket packet)

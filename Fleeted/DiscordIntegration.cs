@@ -55,6 +55,11 @@ public class DiscordIntegration : MonoBehaviour
             {
                 var rcInstance = ResultsController.resultsController;
 
+                //rcInstance.exitConfirmations = true
+                typeof(ResultsController)
+                    .GetField("exitConfirmation", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(rcInstance, true);
+
                 //rcInstance.Exit();
                 typeof(ResultsController).GetMethod("Exit", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(rcInstance, null);
@@ -111,21 +116,15 @@ public class DiscordIntegration : MonoBehaviour
         {
             var currentLobbyMembers = LobbyManager.Instance.CurrentLobby.MemberCount +
                                       LobbyManager.Instance.Players.Values.Count(player => player.IsBot);
+
             var currentLobbyMemberCap = LobbyManager.Instance.CurrentLobby.MaxMembers;
             var settings = LobbyManager.Instance.Settings;
 
-
             var lobbyID = LobbyManager.Instance.CurrentLobby.Id;
-            if (!isInGame) // Waiting in Lobby
-            {
-                UpdateActivity(_discord, Activities.InLobby, false, settings.Mode.ToString(), settings.Stage.ToString(),
-                    currentLobbyMembers, currentLobbyMemberCap, lobbyID.ToString());
-            }
-            else // Playing in a Lobby
-            {
-                UpdateActivity(_discord, Activities.InLobby, true, settings.Mode.ToString(), settings.Stage.ToString(),
-                    currentLobbyMembers, currentLobbyMemberCap, lobbyID.ToString());
-            }
+
+            UpdateActivity(_discord, Activities.InLobby, isInGame, settings.Mode.ToString(),
+                settings.Stage.ToString(), // Waiting in Lobby
+                currentLobbyMembers, currentLobbyMemberCap, lobbyID.ToString());
         }
         else // Left the lobby
         {
@@ -181,7 +180,7 @@ public class DiscordIntegration : MonoBehaviour
                         LargeImage = "shipped_img_1",
                         LargeText = "Shipped",
                         SmallImage = "shipped_img_2",
-                        SmallText = stage,
+                        SmallText = stage.Length <= 2 ? "None" : stage,
                     },
                     Party =
                     {

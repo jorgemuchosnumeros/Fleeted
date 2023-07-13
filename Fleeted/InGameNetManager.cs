@@ -19,11 +19,11 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
+    private const float ArtificialLatency = 0.12f;
     public static InGameNetManager Instance;
 
     public bool isHost;
     public bool isClient;
-
 
     public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
@@ -40,7 +40,7 @@ public class InGameNetManager : MonoBehaviour
 
     public readonly TimedAction MainSendTick = new(1.0f / 10);
 
-    private readonly Dictionary<SteamId, long> pingMap = new();
+    public readonly Dictionary<SteamId, long> pingMap = new();
     public readonly TimedAction PingSendTick = new(1.0f);
 
     private readonly Dictionary<int, Rigidbody2D> rbBullets = new();
@@ -124,7 +124,7 @@ public class InGameNetManager : MonoBehaviour
             var ping = 0L;
             if (pingMap.TryGetValue(members[i].Id, out var gotPing))
             {
-                ping = gotPing;
+                ping = gotPing - (int) Math.Round(ArtificialLatency * 500);
             }
 
             GUI.Label(new Rect(10, 30 + i * 20, 200, 40), $"{members[i].Name} Ping: {ping} ms");
@@ -429,7 +429,6 @@ public class InGameNetManager : MonoBehaviour
         }
 
         var compressed = compressOut.ToArray();
-
         using MemoryStream packetStream = new MemoryStream();
         Packet packet = new Packet
         {
@@ -447,7 +446,7 @@ public class InGameNetManager : MonoBehaviour
 
         foreach (var member in LobbyManager.Instance.CurrentLobby.Members)
         {
-            SteamNetworking.SendP2PPacket(member.Id, packetData, packetData.Length, 0, sendFlags);
+            StartCoroutine(SendP2PPacket(member.Id, packetData, sendFlags));
         }
     }
 
@@ -476,7 +475,14 @@ public class InGameNetManager : MonoBehaviour
 
         var packetData = packetStream.ToArray();
 
-        SteamNetworking.SendP2PPacket(to, packetData, packetData.Length, 0, sendFlags);
+        StartCoroutine(SendP2PPacket(to, packetData, sendFlags));
+    }
+
+    private static IEnumerator SendP2PPacket(SteamId id, byte[] packetData, P2PSend sendFlags)
+    {
+        yield return new WaitForSeconds(ArtificialLatency);
+
+        SteamNetworking.SendP2PPacket(id, packetData, packetData.Length, 0, sendFlags);
     }
 
     public void UpdateShipReferences()
@@ -587,6 +593,12 @@ public class InGameNetManager : MonoBehaviour
             case GlobalController.screens.gamepause:
             case GlobalController.screens.game:
                 var rcInstance = ResultsController.resultsController;
+
+                //rcInstance.exitConfirmations = true
+                typeof(ResultsController)
+                    .GetField("exitConfirmation", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(rcInstance, true);
+
                 //rcInstance.Exit();
                 typeof(ResultsController).GetMethod("Exit", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(rcInstance, null);
