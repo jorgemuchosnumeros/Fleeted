@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 namespace Fleeted.patches;
 
@@ -272,5 +273,180 @@ public static class KeepGameGoingDuringPause
                     .Invoke(instance, null);
             }
         }
+    }
+}
+
+[HarmonyPatch(typeof(GameState), "StartNewRoundRace")]
+public static class DontDesyncRandom5
+{
+    static bool Prefix(GameState __instance)
+    {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+        StartNewRoundRace(__instance);
+        return false;
+    }
+
+    static void StartNewRoundRace(GameState instance)
+    {
+        var roundEnded = typeof(GameState).GetField("roundEnded", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var ResetPlayersDistance =
+            typeof(GameState).GetMethod("ResetPlayersDistance", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var deaths = typeof(GameState).GetField("deaths", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var count = typeof(GameState).GetField("count", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var shipControllers =
+            typeof(GameState).GetField("shipControllers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var shipPositions = typeof(GameState).GetField("shipPositions", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var r = typeof(GameState).GetField("r", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialPositionsRace0 =
+            typeof(GameState).GetField("initialPositionsRace0", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialRotationsRace0 =
+            typeof(GameState).GetField("initialRotationsRace0", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialPositionsRace1 =
+            typeof(GameState).GetField("initialPositionsRace1", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialRotationsRace1 =
+            typeof(GameState).GetField("initialRotationsRace1", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialPositionsRace2 =
+            typeof(GameState).GetField("initialPositionsRace2", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialRotationsRace2 =
+            typeof(GameState).GetField("initialRotationsRace2", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialPositionsRace3 =
+            typeof(GameState).GetField("initialPositionsRace3", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var initialRotationsRace3 =
+            typeof(GameState).GetField("initialRotationsRace3", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var ShowCharaFrames =
+            typeof(GameState).GetMethod("ShowCharaFrames", BindingFlags.Instance | BindingFlags.NonPublic);
+
+
+        roundEnded.SetValue(instance, false);
+        GlobalController.globalController.screen = GlobalController.screens.gamecountdown;
+        instance.playersAlive = new bool[8];
+        instance.totalPlayers = 0;
+        Random.InitState(LobbyManager.Instance.seed);
+        instance.raceOrientation = Random.Range(0, 4);
+        if (instance.raceOrientation == 0 || instance.raceOrientation == 1)
+        {
+            instance.currentWinnerDistance = -40f;
+        }
+        else
+        {
+            instance.currentWinnerDistance = 40f;
+        }
+
+        ResetPlayersDistance.Invoke(instance, null);
+        instance.HideRaceLines();
+        for (int i = 0; i < 8; i++)
+        {
+            if (instance.activePlayers[i])
+            {
+                instance.shipCharacter[i].SetAsChara(instance.charas[i]);
+                instance.playersAlive[i] = true;
+                deaths.SetValue(instance, 0);
+                instance.totalPlayers++;
+            }
+        }
+
+        instance.actualPlayers = new int[instance.totalPlayers];
+        count.SetValue(instance, 0);
+        for (int j = 0; j < 8; j++)
+        {
+            if (instance.activePlayers[j])
+            {
+                instance.actualPlayers[(int) count.GetValue(instance)] = j + 1;
+                count.SetValue(instance, (int) count.GetValue(instance) + 1);
+            }
+        }
+
+        instance.cameraController = GameObject.Find("Render Camera").GetComponent<CameraController>();
+        instance.cameraController.ResetCamera();
+        WorldSpawner.worldSpawner.NewMap();
+        for (int k = 0; k < instance.actualPlayers.Length; k++)
+        {
+            var tmpShipControllers = (ShipController[]) shipControllers.GetValue(instance);
+            tmpShipControllers[instance.actualPlayers[k] - 1].playerN = instance.actualPlayers[k];
+            shipControllers.SetValue(instance, tmpShipControllers);
+
+            instance.playerShips[instance.actualPlayers[k] - 1].SetActive(value: true);
+        }
+
+        shipPositions.SetValue(instance, new int[8]);
+
+        for (int l = 0; l < instance.actualPlayers.Length; l++)
+        {
+            Random.InitState(LobbyManager.Instance.seed + l);
+            r.SetValue(instance, Random.Range(0, 8));
+            while (((int[]) shipPositions.GetValue(instance))[(int) r.GetValue(instance)] != 0)
+            {
+                r.SetValue(instance, (int) r.GetValue(instance) + 1);
+                if ((int) r.GetValue(instance) > 7)
+                {
+                    r.SetValue(instance, 0);
+                }
+            }
+
+            var tmpShipPositions = (int[]) shipPositions.GetValue(instance);
+            tmpShipPositions[(int) r.GetValue(instance)] = instance.actualPlayers[l];
+            shipPositions.SetValue(instance, tmpShipPositions);
+        }
+
+        for (var m = 0; m < ((int[]) shipPositions.GetValue(instance)).Length; m++)
+        {
+            if (((int[]) shipPositions.GetValue(instance))[m] == 0) continue;
+
+            switch (instance.raceOrientation)
+            {
+                case 0:
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.position =
+                        ((Vector2[]) initialPositionsRace0.GetValue(instance))[m];
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.eulerAngles =
+                        ((Vector3[]) initialRotationsRace0.GetValue(instance))[m];
+                    break;
+                case 1:
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.position =
+                        ((Vector2[]) initialPositionsRace1.GetValue(instance))[m];
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.eulerAngles =
+                        ((Vector3[]) initialRotationsRace1.GetValue(instance))[m];
+                    break;
+                case 2:
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.position =
+                        ((Vector2[]) initialPositionsRace2.GetValue(instance))[m];
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.eulerAngles =
+                        ((Vector3[]) initialRotationsRace2.GetValue(instance))[m];
+                    break;
+                default:
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.position =
+                        ((Vector2[]) initialPositionsRace3.GetValue(instance))[m];
+                    instance.playerShips[((int[]) shipPositions.GetValue(instance))[m] - 1].transform.eulerAngles =
+                        ((Vector3[]) initialRotationsRace3.GetValue(instance))[m];
+                    break;
+            }
+        }
+
+        instance.semaphore.ResetTrigger("cancel");
+        instance.semaphore.SetTrigger("start");
+        ShowCharaFrames.Invoke(instance, null);
+    }
+}
+
+[HarmonyPatch(typeof(GameState), "SetRandomMode")]
+public static class DontDesyncRandom6
+{
+    static void Prefix()
+    {
+        Random.InitState(LobbyManager.Instance.seed);
     }
 }

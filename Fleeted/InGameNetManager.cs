@@ -19,7 +19,7 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
-    private const float ArtificialLatency = 0.12f;
+    private const float ArtificialLatency = 0f;
     public static InGameNetManager Instance;
 
     public bool isHost;
@@ -386,8 +386,6 @@ public class InGameNetManager : MonoBehaviour
                     foreach (var projectilePacket in bulkProjectileUpdate.Updates)
                     {
                         if (ownedSlots.Contains(projectilePacket.SourceShip)) continue;
-
-                        Plugin.Logger.LogWarning(projectilePacket == null);
 
                         if (bulletControllers.TryGetValue(projectilePacket.Id, out var bcontroller))
                         {

@@ -1,4 +1,4 @@
-﻿#define GOLDBERG
+﻿#undef GOLDBERG
 
 using System;
 using System.Collections;

@@ -1,15 +1,18 @@
 using System.Reflection;
 using Fleeted.packets;
+using Fleeted.utils;
 using UnityEngine;
 
 namespace Fleeted;
 
 public class NetBulletController : MonoBehaviour
 {
+    private readonly TimedAction _stillBulletLifeTime = new(0.5f);
     private BulletController _bcontroller;
     private UpdateProjectilePacket _latestSPacket;
+    private bool _letBulletLoose;
     private Rigidbody2D _rb;
-
+    private Vector2 _savedBulletLifeTimePos = Vector2.positiveInfinity;
 
     private void Awake()
     {
@@ -17,15 +20,29 @@ public class NetBulletController : MonoBehaviour
         _bcontroller = GetComponent<BulletController>();
     }
 
+    private void Start()
+    {
+        _stillBulletLifeTime.Start();
+    }
+
     private void Update()
     {
         if (GlobalController.globalController.screen != GlobalController.screens.game)
-        {
-            Plugin.Logger.LogInfo("Exploding Bullet that is not moving");
             Explode();
-        }
 
         if (_latestSPacket == null) return;
+
+        if (_stillBulletLifeTime.TrueDone())
+        {
+            var position = (Vector2) transform.position;
+            var diff = (position - _savedBulletLifeTimePos).magnitude;
+
+            if (diff > 0.2f)
+                _letBulletLoose = true;
+
+            _savedBulletLifeTimePos = position;
+            _stillBulletLifeTime.Start();
+        }
 
         var posDiscrepancy = (new Vector2(transform.position.x, transform.position.y) - _latestSPacket.Position)
             .sqrMagnitude;
@@ -40,7 +57,7 @@ public class NetBulletController : MonoBehaviour
 
         _rb.velocity = _latestSPacket.Velocity;
 
-        if (posDiscrepancy > 2f)
+        if (posDiscrepancy > 2f && !_letBulletLoose)
         {
             transform.position = Vector2.Lerp(transform.position, predictedPosition, 6f * Time.deltaTime);
         }
@@ -54,9 +71,6 @@ public class NetBulletController : MonoBehaviour
     public void ReceiveUpdates(UpdateProjectilePacket packet)
     {
         _latestSPacket = packet;
-
-        Plugin.Logger.LogInfo(
-            $"Received a bullet from {packet.SourceShip}\nvelocity: {packet.Velocity}, position: {packet.Position}, id: {packet.Id}");
     }
 
     public void Explode()

@@ -135,6 +135,23 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public IEnumerator TransitionToLobby(ulong id)
     {
+        switch (GlobalController.globalController.screen)
+        {
+            case GlobalController.screens.mainmenu:
+                var mmcInstance = FindObjectOfType<MainMenuController>();
+                mmcInstance.selection = 2;
+                ApplyPlayOnlinePatch.IsOnlineOptionSelected = true;
+                typeof(MainMenuController).GetMethod("ApplyOptions", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(mmcInstance, null);
+                yield return new WaitForSeconds(0.5f);
+                break;
+            case GlobalController.screens.optionsmenu:
+                break;
+            default:
+                Plugin.Logger.LogInfo($"Cannot Join from screen: {GlobalController.globalController.screen}");
+                yield break;
+        }
+
         _mmContainersController.HideOptions();
         CustomOnlineMenu.Instance.ForceHideMenu(true);
         CustomMainMenu.Instance.ForceHideMenu(true);

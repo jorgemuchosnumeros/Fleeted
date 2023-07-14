@@ -8,12 +8,12 @@ namespace Fleeted;
 
 public class NetShipController : MonoBehaviour
 {
-    const int Steps = 20;
-    public readonly TimedAction CollisionDisable = new(0.075f);
+    const int DebugSteps = 20;
+    public readonly TimedAction CollisionDisable = new(0.3f);
 
     private ShipColliderController _ccollider;
     private ShipController _controller;
-    private GameObject[] _debugTrajectoryPoints = new GameObject[Steps];
+    private GameObject[] _debugTrajectoryPoints = new GameObject[DebugSteps];
 
     private ShipPacket _latestSPacket;
     private Rigidbody2D _rb;
@@ -56,7 +56,7 @@ public class NetShipController : MonoBehaviour
             (new Vector2(transform.position.x, transform.position.y) -
              predictedPosition) //_latestSPacket.Position change
             .sqrMagnitude;
-        if (posDiscrepancy > 10f)
+        if (posDiscrepancy > 15f)
         {
             transform.position = predictedPosition;
         }
@@ -75,7 +75,7 @@ public class NetShipController : MonoBehaviour
 
     private void DebugPredict(long ping)
     {
-        for (var i = 0; i < Steps; i++)
+        for (var i = 0; i < DebugSteps; i++)
         {
             if (_debugTrajectoryPoints[i] == null)
             {
@@ -90,7 +90,7 @@ public class NetShipController : MonoBehaviour
             _debugTrajectoryPoints[i].transform.localScale = Vector2.one * 0.5f;
             _debugTrajectoryPoints[i].transform.position = PredictObjectPosition(_latestSPacket.Position,
                                                                _latestSPacket.Velocity, _latestSPacket.StickRotation,
-                                                               i * (ping / 100f) / Steps) +
+                                                               i * (ping / 100f) / DebugSteps) +
                                                            new Vector2(-1.3f, -1.15f);
         }
     }
@@ -101,7 +101,7 @@ public class NetShipController : MonoBehaviour
         if (rttSecs > 0.35f) // Don't Bother on predicting if latency is this big, it's probably going to go way too wrong
             return receivedPos;
 
-        var perceivedLatencySecs = rttSecs / 2;
+        var perceivedLatencySecs = rttSecs / 1.6f;
 
         return receivedPos + receivedVel * perceivedLatencySecs;
 

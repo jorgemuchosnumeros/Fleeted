@@ -20,7 +20,6 @@ public class DontDesyncRandom0
 {
     static void Prefix()
     {
-        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
         Random.InitState(LobbyManager.Instance.seed);
     }
 }
@@ -177,15 +176,6 @@ public class DontDesyncRandom1
         {
             initialLeaderDestination.SetValue(instance, true);
         }
-    }
-}
-
-[HarmonyPatch(typeof(BotController), nameof(BotController.InitialResetAgent))]
-public class DontDesyncRandom2
-{
-    static void Prefix()
-    {
-        Random.InitState(LobbyManager.Instance.seed);
     }
 }
 
