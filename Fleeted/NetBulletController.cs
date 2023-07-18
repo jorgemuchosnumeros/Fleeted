@@ -48,12 +48,17 @@ public class NetBulletController : MonoBehaviour
             .sqrMagnitude;
 
         var predictedPosition = _latestSPacket.Position;
-        if (InGameNetManager.Instance.pingMap.TryGetValue(
-                LobbyManager.Instance.Players[_bcontroller.player - 1].OwnerOfCharaId, out var ping))
+
+        if (LobbyManager.Instance.Players.TryGetValue(_bcontroller.player - 1, out var player))
         {
-            predictedPosition =
-                NetShipController.PredictObjectPosition(_latestSPacket.Position, _latestSPacket.Velocity, ping / 1000f);
+            if (InGameNetManager.Instance.pingMap.TryGetValue(player.OwnerOfCharaId, out var ping))
+            {
+                predictedPosition =
+                    NetShipController.PredictObjectPosition(_latestSPacket.Position, _latestSPacket.Velocity,
+                        ping / 1000f);
+            }
         }
+
 
         _rb.velocity = _latestSPacket.Velocity;
 

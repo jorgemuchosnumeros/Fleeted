@@ -1,4 +1,4 @@
-﻿#undef GOLDBERG
+﻿#define GOLDBERG
 
 using System;
 using System.Collections;
@@ -426,7 +426,6 @@ public class LobbyManager : MonoBehaviour
     private void OnLobbyCreated(Result result, Lobby lobby)
     {
         _createLobbyResult = result;
-        lobby.SetData("Creator", SteamClient.SteamId.ToString());
     }
 
     private async void OnLobbyEntered(Lobby lobby)
@@ -477,13 +476,24 @@ public class LobbyManager : MonoBehaviour
             _createLobbyResult = Result.None;
             lobby.SetJoinable(true);
             lobby.SetFriendsOnly();
+            lobby.SetData("Creator", SteamClient.SteamId.ToString());
+            lobby.SetData("PluginGUID", Plugin.BuildGUID);
         }
         else
         {
             hostOptions = false;
+            
+            if (lobby.GetData("PluginGUID") != Plugin.BuildGUID)
+            {
+                CustomLobbyMenu.Instance.infoTMP.text = "Version mismatch, make sure both you and host have the same version";
+                CustomLobbyMenu.Instance.infoTMP.color = Color.red;
+                lobby.Leave();
+                return;
+            }
+            
             if (lobby.MemberCount > lobby.MaxMembers)
             {
-                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask Host to raise member limit";
+                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask host to raise member limit";
                 CustomLobbyMenu.Instance.infoTMP.color = Color.red;
                 lobby.Leave();
                 return;
@@ -491,7 +501,7 @@ public class LobbyManager : MonoBehaviour
 
             if (OccupiedSlotsInPlayMenu(lobby) >= 8)
             {
-                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask Host to remove bots";
+                CustomLobbyMenu.Instance.infoTMP.text = "Lobby is full, ask host to remove bots";
                 CustomLobbyMenu.Instance.infoTMP.color = Color.red;
                 lobby.Leave();
                 return;

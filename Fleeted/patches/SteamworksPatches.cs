@@ -1,10 +1,9 @@
-﻿#undef GOLDBERG
+﻿#define GOLDBERG
 
 using System;
 using System.Reflection;
 using HarmonyLib;
 using Steamworks;
-using UnityEngine;
 using Object = UnityEngine.Object;
 
 namespace Fleeted.patches;

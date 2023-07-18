@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using HarmonyLib;
+using TMPro;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -152,5 +154,92 @@ public static class ExitEveryoneIfHostExitsGame
 
         InGameNetManager.Instance.AbandonConnection();
         InGameNetManager.Instance.StopClient();
+    }
+}
+
+[HarmonyPatch(typeof(ResultsController), nameof(ResultsController.SetNewGame))]
+public static class ForceLoadShipContainersFromLobby
+{
+    static bool Prefix(ResultsController __instance)
+    {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+        SetNewGame(__instance);
+        return false;
+    }
+
+    static void SetNewGame(ResultsController instance)
+    {
+        var starsToWin =
+            typeof(ResultsController).GetField("starsToWin", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var ParsePlayers =
+            typeof(ResultsController).GetMethod("ParsePlayers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var actualPlayers =
+            typeof(ResultsController).GetField("actualPlayers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var shipCharacters =
+            typeof(ResultsController).GetField("shipCharacters", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var parsedPlayers =
+            typeof(ResultsController).GetField("parsedPlayers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var charas =
+            typeof(ResultsController).GetField("charas", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var playerStarsNumbers =
+            typeof(ResultsController).GetField("playerStarsNumbers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        starsToWin.SetValue(instance, GameState.gameState.starsToWin);
+        instance.objectiveNumber.text = ((int) starsToWin.GetValue(instance)).ToString();
+
+        GameState.gameState.actualPlayers = new int[LobbyManager.Instance.Players.Count];
+        var i = 0;
+        foreach (var slot in LobbyManager.Instance.Players.Select(player => player.Key))
+        {
+            GameState.gameState.actualPlayers[i] = slot + 1;
+            i++;
+        }
+
+        ParsePlayers.Invoke(instance, null);
+
+        var actualPlayersVal = (int[]) actualPlayers.GetValue(instance);
+        var shipCharactersVal = (ShipCharacter[]) shipCharacters.GetValue(instance);
+        var parsedPlayersVal = (int[]) parsedPlayers.GetValue(instance);
+        var charasVal = (int[]) charas.GetValue(instance);
+
+        ProfileArray(actualPlayersVal, "actualPlayers");
+        ProfileArray(parsedPlayersVal, "parsedPlayers");
+
+        foreach (var t in actualPlayersVal)
+        {
+            shipCharactersVal[parsedPlayersVal[t]].SetAsChara(charasVal[t - 1]);
+            instance.shipContainers[parsedPlayersVal[t]].SetActive(value: true);
+        }
+
+        for (int j = 0; j < 8; j++)
+        {
+            var tmpPlayerStarsNumbers = (TextMeshProUGUI[]) playerStarsNumbers.GetValue(instance);
+            tmpPlayerStarsNumbers[j].text = "0";
+            playerStarsNumbers.SetValue(instance, tmpPlayerStarsNumbers);
+        }
+
+        Vector2 vector = new Vector2(-24.5f, -20f);
+        for (int k = 0; k < 8; k++)
+        {
+            instance.shipContainers[k].transform.localPosition = vector;
+            vector.x += 7f;
+        }
+    }
+
+    static void ProfileArray<T>(T[] arr, string name)
+    {
+        Plugin.Logger.LogInfo(name);
+        foreach (var m in arr)
+        {
+            Plugin.Logger.LogInfo(m);
+        }
+
+        Plugin.Logger.LogInfo("\n");
     }
 }

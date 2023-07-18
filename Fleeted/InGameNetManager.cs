@@ -25,7 +25,6 @@ public class InGameNetManager : MonoBehaviour
     public bool isHost;
     public bool isClient;
 
-    public List<GameObject> shipsGO;
     public List<int> ownedSlots = new();
 
     public int CameraMovementSeed;
@@ -47,6 +46,11 @@ public class InGameNetManager : MonoBehaviour
     public readonly Dictionary<int, Rigidbody2D> rbSlots = new();
 
     private bool _isShipReferenceUpdatePending;
+
+    // Debug
+    private bool _logClientDiff;
+    private long _serverClientTimeDiff;
+    private long _startTime;
 
     public HashSet<BulletController> ownedLiveBullets = new();
 
@@ -77,6 +81,12 @@ public class InGameNetManager : MonoBehaviour
 
     private void Update()
     {
+        if (_logClientDiff)
+        {
+            Thread.Sleep(20);
+            Plugin.Logger.LogInfo($"{DateTime.UtcNow.Ticks + _serverClientTimeDiff} < {_startTime}");
+        }
+
         if (!isClient) return;
 
         var inCountdown = GlobalController.globalController.screen == GlobalController.screens.gamecountdown;
@@ -124,7 +134,7 @@ public class InGameNetManager : MonoBehaviour
             var ping = 0L;
             if (pingMap.TryGetValue(members[i].Id, out var gotPing))
             {
-                ping = gotPing - (int) Math.Round(ArtificialLatency * 500);
+                ping = gotPing;
             }
 
             GUI.Label(new Rect(10, 30 + i * 20, 200, 40), $"{members[i].Name} Ping: {ping} ms");
@@ -618,6 +628,7 @@ public class InGameNetManager : MonoBehaviour
         lobby.SetData("StartTime", string.Empty);
 
         var serverClientTimeDiff = NTP.GetNetworkTime().Ticks - DateTime.UtcNow.Ticks;
+        _serverClientTimeDiff = serverClientTimeDiff;
 
         while (LobbyManager.Instance.isHost)
         {
@@ -639,12 +650,16 @@ public class InGameNetManager : MonoBehaviour
             SendPingPacket(false, flag: P2PSend.Unreliable);
 
         Plugin.Logger.LogInfo($"Current Time: {DateTime.UtcNow.Ticks + serverClientTimeDiff}");
-        var startTime = lobby.GetData("StartTime");
+        var startTime = long.Parse(lobby.GetData("StartTime"));
+        _startTime = startTime;
+
         Plugin.Logger.LogInfo($"Everyone is ready, starting at {startTime}");
 
         ShowConnectingMessage(true);
 
-        yield return new WaitUntil(() => DateTime.UtcNow.Ticks + serverClientTimeDiff >= long.Parse(startTime));
+        _logClientDiff = true;
+        yield return new WaitUntil(() => DateTime.UtcNow.Ticks + serverClientTimeDiff >= startTime); // FIXME: Buggy AF
+        _logClientDiff = false;
 
         ShowConnectingMessage(false);
 

@@ -209,6 +209,39 @@ public static class ManageCameraEvenInPause4
     }
 }
 
+[HarmonyPatch(typeof(CameraController), "MoveRace")]
+public static class MoveRaceShakeSync
+{
+    static void Postfix(CameraController __instance)
+    {
+        var screenshakeTimer = (float)
+            typeof(CameraController).GetField("screenshakeTimer", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(__instance);
+
+        if (screenshakeTimer > 0) return;
+
+        var raceOrientation = (int)
+            typeof(CameraController).GetField("raceOrientation", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(__instance);
+
+        switch (raceOrientation)
+        {
+            case 0: // Up
+            case 2: // Down
+                __instance.transform.position = Vector3.Lerp(__instance.transform.position,
+                    new Vector3(0f, __instance.transform.position.y, __instance.transform.position.z),
+                    Time.deltaTime * 6f);
+                break;
+            case 1: // Right
+            case 3: // Left
+                __instance.transform.position = Vector3.Lerp(__instance.transform.position,
+                    new Vector3(__instance.transform.position.x, 0f, __instance.transform.position.z),
+                    Time.deltaTime * 6f);
+                break;
+        }
+    }
+}
+
 // Testing
 /*
 [HarmonyPatch(typeof(CameraController), "Move")]

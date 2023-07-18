@@ -28,7 +28,7 @@ public class NetShipController : MonoBehaviour
 
     private void Update()
     {
-        if (_latestSPacket == null) return;
+        if (_latestSPacket == null || InGameNetManager.Instance.ownedSlots.Contains(_controller.playerN - 1)) return;
 
         switch (GlobalController.globalController.screen)
         {
