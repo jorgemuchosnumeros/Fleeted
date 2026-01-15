@@ -15,6 +15,8 @@ using Steamworks.Data;
 using TMPro;
 using UnityEngine;
 
+using CompressionLevel = System.IO.Compression.CompressionLevel;
+
 namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
