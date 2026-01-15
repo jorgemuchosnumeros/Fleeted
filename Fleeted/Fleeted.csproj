@@ -7,6 +7,7 @@
         <Version>0.1.0</Version>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>latest</LangVersion>
+        <ShippedManagedDir>/home/jorge/.local/share/Steam/steamapps/common/Shipped/Shipped_Data/Managed</ShippedManagedDir>
         <RestoreAdditionalProjectSources>
             https://api.nuget.org/v3/index.json;
             https://nuget.bepinex.dev/v3/index.json;
@@ -20,7 +21,7 @@
         <PackageReference Include="BepInEx.Core" Version="5.*" />
         <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" />
         <PackageReference Include="System.Memory" Version="4.5.3" />
-        <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies"
+        <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
@@ -47,63 +48,60 @@
 
     <ItemGroup>
         <Reference Include="Assembly-CSharp">
-            <HintPath>libs\Assembly-CSharp.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\Assembly-CSharp.dll</HintPath>
             <Private>False</Private>
         </Reference>
         <Reference Include="Facepunch.Steamworks.Win64">
             <HintPath>libs\Facepunch.Steamworks.Win64.dll</HintPath>
         </Reference>
         <Reference Include="netstandard">
-            <HintPath>libs\netstandard.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\netstandard.dll</HintPath>
             <Private>False</Private>
         </Reference>
         <Reference Include="Rewired_Core">
-            <HintPath>libs\Rewired_Core.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\Rewired_Core.dll</HintPath>
         </Reference>
         <Reference Include="System.Net.Http"/>
         
         <Reference Include="Unity.TextMeshPro">
-            <HintPath>libs\Unity.TextMeshPro.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\Unity.TextMeshPro.dll</HintPath>
             <Private>False</Private>
         </Reference>
         <Reference Include="UnityEngine">
-            <HintPath>libs\UnityEngine.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.AIModule">
-            <HintPath>libs\UnityEngine.AIModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.AIModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.AnimationModule">
-            <HintPath>libs\UnityEngine.AnimationModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.AnimationModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.AudioModule">
-            <HintPath>libs\UnityEngine.AudioModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.AudioModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.CoreModule">
-            <HintPath>libs\UnityEngine.CoreModule.dll</HintPath>
-        </Reference>
-        <Reference Include="UnityEngine.ImageConversionModule">
-            <HintPath>libs\UnityEngine.ImageConversionModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.CoreModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.IMGUIModule">
-            <HintPath>libs\UnityEngine.IMGUIModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.InputLegacyModule">
-            <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.JSONSerializeModule">
-            <HintPath>libs\UnityEngine.JSONSerializeModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.JSONSerializeModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.Physics2DModule">
-            <HintPath>libs\UnityEngine.Physics2DModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.Physics2DModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UI">
-            <HintPath>libs\UnityEngine.UI.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.UI.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UIElementsModule">
-            <HintPath>libs\UnityEngine.UIElementsModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.UIElementsModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UIModule">
-            <HintPath>libs\UnityEngine.UIModule.dll</HintPath>
+            <HintPath>$(ShippedManagedDir)\UnityEngine.UIModule.dll</HintPath>
         </Reference>
     </ItemGroup>
 </Project>
