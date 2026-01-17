@@ -12,7 +12,6 @@ namespace Fleeted.Discord
             {
                 entitlements.Add(GetEntitlementAt(i));
             }
-
             return entitlements;
         }
 
@@ -24,7 +23,6 @@ namespace Fleeted.Discord
             {
                 skus.Add(GetSkuAt(i));
             }
-
             return skus;
         }
     }

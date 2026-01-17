@@ -12,7 +12,6 @@ namespace Fleeted.Discord
             {
                 files.Add(StatAt(i));
             }
-
             return files;
         }
     }

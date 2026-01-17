@@ -5,16 +5,16 @@ using UnityEngine;
 
 namespace Fleeted.Discord
 {
-    public partial struct ImageHandle
+	public partial struct ImageHandle
     {
-        static public Fleeted.Discord.ImageHandle User(Int64 id)
+        static public ImageHandle User(Int64 id)
         {
             return User(id, 128);
         }
 
-        static public Fleeted.Discord.ImageHandle User(Int64 id, UInt32 size)
+        static public ImageHandle User(Int64 id, UInt32 size)
         {
-            return new Fleeted.Discord.ImageHandle
+            return new ImageHandle
             {
                 Type = ImageType.User,
                 Id = id,
@@ -25,12 +25,12 @@ namespace Fleeted.Discord
 
     public partial class ImageManager
     {
-        public void Fetch(Fleeted.Discord.ImageHandle handle, FetchHandler callback)
+        public void Fetch(ImageHandle handle, FetchHandler callback)
         {
             Fetch(handle, false, callback);
         }
 
-        public byte[] GetData(Fleeted.Discord.ImageHandle handle)
+        public byte[] GetData(ImageHandle handle)
         {
             var dimensions = GetDimensions(handle);
             var data = new byte[dimensions.Width * dimensions.Height * 4];
@@ -42,8 +42,7 @@ namespace Fleeted.Discord
         public Texture2D GetTexture(ImageHandle handle)
         {
             var dimensions = GetDimensions(handle);
-            var texture =
- new Texture2D((int)dimensions.Width, (int)dimensions.Height, TextureFormat.RGBA32, false, true);
+            var texture = new Texture2D((int)dimensions.Width, (int)dimensions.Height, TextureFormat.RGBA32, false, true);
             texture.LoadRawTextureData(GetData(handle));
             texture.Apply();
             return texture;
