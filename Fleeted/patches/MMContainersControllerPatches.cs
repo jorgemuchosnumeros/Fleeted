@@ -36,6 +36,7 @@ public static class RefreshClientNames
     static void Postfix()
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+        if (CustomLobbyMenu.Instance == null) return;
 
         CustomLobbyMenu.Instance.StartCoroutine(DelayChangeToSteamNames());
     }
@@ -43,6 +44,7 @@ public static class RefreshClientNames
     static IEnumerator DelayChangeToSteamNames()
     {
         yield return new WaitForSeconds(0.5f);
+        if (CustomLobbyMenu.Instance == null) yield break;
         CustomLobbyMenu.Instance.ChangeToSteamNames();
     }
 }

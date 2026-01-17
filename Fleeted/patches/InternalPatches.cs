@@ -10,14 +10,21 @@ public static class MenuLoaded
 
     public static void TrySetupMainMenu()
     {
-        if (_initialized)
-            return;
         if (!SceneManager.GetSceneByName("Mainmenu").isLoaded)
             return;
         if (CustomMainMenu.Instance == null || CustomOnlineMenu.Instance == null ||
             CustomSettingsMenu.Instance == null || ArrowJoinInput.Instance == null ||
             CustomLobbyMenu.Instance == null)
             return;
+        if (_initialized)
+        {
+            // Reinitialize if the menu scene was reloaded and UI objects were destroyed.
+            if (CustomMainMenu.Instance.playOnlineOption != null &&
+                CustomMainMenu.Instance.playLocalOption != null &&
+                CustomMainMenu.Instance.mainMenu != null)
+                return;
+            _initialized = false;
+        }
 
         Plugin.Logger.LogInfo("Menu Loaded");
 

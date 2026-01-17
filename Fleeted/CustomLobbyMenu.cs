@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using Fleeted.patches;
 using Fleeted.utils;
@@ -86,6 +87,9 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public IEnumerator ShowPlayMenuButtons(float delay)
     {
+        if (info == null)
+            yield break;
+
         playMenuButtons = new GameObject("Custom Play Menu Buttons");
         playMenuButtons.transform.SetParent(info.transform, false);
         playMenuButtons.AddComponent<CustomPlayMenuButtons>();
@@ -95,20 +99,31 @@ public class CustomLobbyMenu : MonoBehaviour
         if (delay <= 0) yield break;
 
         // Reset to leave a chance to the CustomPlayMenuButtons script be ran again
-        info.SetActive(true);
-        info.SetActive(false);
+        if (info != null)
+        {
+            info.SetActive(true);
+            info.SetActive(false);
+        }
     }
 
     public void HideLobbyMenu()
     {
-        InGameNetManager.Instance.ResetState();
+        if (InGameNetManager.Instance != null)
+            InGameNetManager.Instance.ResetState();
 
-        LobbyManager.Instance.CurrentLobby.Leave();
-        LobbyManager.Instance.isHost = false;
-        LobbyManager.Instance.hostOptions = true;
+        if (LobbyManager.Instance != null)
+        {
+            if (!EqualityComparer<Steamworks.Data.Lobby>.Default.Equals(LobbyManager.Instance.CurrentLobby, default))
+                LobbyManager.Instance.CurrentLobby.Leave();
+            LobbyManager.Instance.isHost = false;
+            LobbyManager.Instance.hostOptions = true;
+        }
 
-        infoTMP.text = _prevInfoText;
-        infoTMP.color = _prevInfoColor;
+        if (infoTMP != null)
+        {
+            infoTMP.text = _prevInfoText;
+            infoTMP.color = _prevInfoColor;
+        }
 
         if (playMenuButtons != null)
             Destroy(playMenuButtons);
@@ -170,24 +185,34 @@ public class CustomLobbyMenu : MonoBehaviour
 
     public void ChangeToSteamNames()
     {
+        if (LobbyManager.Instance == null || LobbyManager.Instance.Players == null)
+            return;
+        if (playerBoxes == null || playerBoxes.Length == 0)
+            return;
+
         var players = LobbyManager.Instance.Players;
         for (var i = 0; i < players.Count; i++)
         {
-            if (playerBoxes[i].activeSelf == false) continue;
+            if (i >= playerBoxes.Length) break;
+            if (playerBoxes[i] == null || playerBoxes[i].activeSelf == false) continue;
 
             var playerBox = playerBoxes[i];
 
-            if (!players.ContainsKey(i)) continue;
+            if (!players.TryGetValue(i, out var playerInfo)) continue;
 
-            var playerName = new Friend(players[i].OwnerOfCharaId).Name;
-            var charaName = playerBox.transform.GetChild(4).GetChild(0);
+            var playerName = new Friend(playerInfo.OwnerOfCharaId).Name;
+            if (playerBox.transform.childCount <= 4) continue;
+            var charaNameParent = playerBox.transform.GetChild(4);
+            if (charaNameParent.childCount <= 0) continue;
+            var charaName = charaNameParent.GetChild(0);
             var tmpugui = charaName.GetComponent<TextMeshProUGUI>();
             var rectTransform = charaName.GetComponent<RectTransform>();
+            if (tmpugui == null || rectTransform == null) continue;
 
             float adjustx;
             float adjusty;
 
-            if (players[i].IsBot)
+            if (playerInfo.IsBot)
             {
                 adjustx = 0f;
                 adjusty = 0f;

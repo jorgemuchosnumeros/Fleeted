@@ -8,6 +8,7 @@ public static class HideStageMenuPatch
     static void Postfix()
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+        if (LobbyManager.Instance == null || CustomLobbyMenu.Instance == null) return;
 
         LobbyManager.Instance.SendOwnCharaSelection();
 
@@ -20,6 +21,7 @@ public static class OnChangeModePatch
 {
     static void Postfix()
     {
+        if (CustomLobbyMenu.Instance == null) return;
         CustomLobbyMenu.Instance.wasStageSettingsSelected = true;
     }
 }
@@ -29,6 +31,7 @@ public static class OnChangeStagePatch
 {
     static void Postfix()
     {
+        if (CustomLobbyMenu.Instance == null) return;
         CustomLobbyMenu.Instance.wasStageSettingsSelected = true;
     }
 }
@@ -38,6 +41,7 @@ public static class OnChangePointsPatch
 {
     static void Postfix()
     {
+        if (CustomLobbyMenu.Instance == null) return;
         CustomLobbyMenu.Instance.wasStageSettingsSelected = true;
     }
 }
@@ -47,6 +51,7 @@ public static class OnInitializePatch
 {
     static void Postfix()
     {
+        if (CustomLobbyMenu.Instance == null) return;
         CustomLobbyMenu.Instance.wasStageSettingsSelected = true;
     }
 }
@@ -56,6 +61,7 @@ public static class OnStartGamePatch
 {
     static void Postfix()
     {
+        if (LobbyManager.Instance == null || InGameNetManager.Instance == null) return;
         if (!LobbyManager.Instance.isHost) return;
         LobbyManager.Instance.CurrentLobby.SetData("GameStarted", "yes");
         InGameNetManager.Instance.StartClient(true);

@@ -1,4 +1,4 @@
-﻿#define GOLDBERG
+﻿//#define GOLDBERG
 
 using System;
 using System.Collections;
@@ -67,21 +67,31 @@ public class LobbyManager : MonoBehaviour
 
     public void SendOwnCharaSelection()
     {
+        if (CustomLobbyMenu.Instance == null)
+            return;
+        if (CustomLobbyMenu.Instance.playerBoxes == null || CustomLobbyMenu.Instance.playerBoxes.Length == 0)
+            return;
+
         var charas = string.Empty;
 
         for (var i = 0; i < 8; i++)
         {
+            if (i >= CustomLobbyMenu.Instance.playerBoxes.Length) break;
             var playerBox = CustomLobbyMenu.Instance.playerBoxes[i];
+            if (playerBox == null) continue;
 
             if (!playerBox.activeSelf) // if we have an empty slot
             {
                 if (Players.ContainsKey(i)) // but, we still have a key referencing this slot
                 {
                     Players.Remove(i);
-                    if (isHost)
-                        CurrentLobby.SetData($"Slot{i}", string.Empty);
-                    else
-                        CurrentLobby.SetMemberData($"Slot{i}", string.Empty);
+                    if (!EqualityComparer<Lobby>.Default.Equals(CurrentLobby, default))
+                    {
+                        if (isHost)
+                            CurrentLobby.SetData($"Slot{i}", string.Empty);
+                        else
+                            CurrentLobby.SetMemberData($"Slot{i}", string.Empty);
+                    }
 
                     Plugin.Logger.LogInfo($"Removing slot {i}");
                 }
@@ -92,10 +102,15 @@ public class LobbyManager : MonoBehaviour
             var playerBoxDisable = playerBox.transform.GetChild(1).gameObject;
 
             if (playerBoxDisable.activeSelf &&
+                Players.ContainsKey(i) &&
                 Players[i].OwnerOfCharaId != SteamClient.SteamId) // Fix for weird disabled bug
             {
                 playerBoxDisable.SetActive(false);
             }
+
+            if (playerBox.transform.childCount <= 4
+                || playerBox.transform.GetChild(2).childCount <= 0)
+                continue;
 
             var playerBoxCanvas = playerBox.transform.GetChild(4);
 
@@ -104,7 +119,9 @@ public class LobbyManager : MonoBehaviour
 
             // weird hack, we dont want to use the names of the TMPUGUI.text cuz those are going to be tampered by other
             // users, we use the SpriteRenderer.sprite.name instead
-            var chara = playerBox.transform.GetChild(2).GetChild(0).GetComponent<SpriteRenderer>().sprite.name switch
+            var charaRenderer = playerBox.transform.GetChild(2).GetChild(0).GetComponent<SpriteRenderer>();
+            if (charaRenderer == null || charaRenderer.sprite == null) continue;
+            var chara = charaRenderer.sprite.name switch
             {
                 "tofe" => 0,
                 "nobu" => 1,
@@ -118,7 +135,13 @@ public class LobbyManager : MonoBehaviour
                 _ => throw new ArgumentOutOfRangeException()
             };
 
-            var isBot = playerBoxCanvas.GetChild(1).GetComponent<TextMeshProUGUI>().text.Contains("*");
+            var isBot = false;
+            if (playerBoxCanvas.childCount > 1)
+            {
+                var botLabel = playerBoxCanvas.GetChild(1).GetComponent<TextMeshProUGUI>();
+                if (botLabel != null)
+                    isBot = botLabel.text.Contains("*");
+            }
 
             var playerInfo = new PlayerInfo
             {
@@ -133,11 +156,12 @@ public class LobbyManager : MonoBehaviour
                 $"slot {i}, owner: {Players[i].OwnerOfCharaId}, chara: {Players[i].Chara}, isBot: {Players[i].IsBot}\n";
             var playerInfoJson = JsonUtility.ToJson(Players[i]);
 
-            if (isHost)
-                CurrentLobby.SetData($"Slot{i}", playerInfoJson);
-            else
+            if (!EqualityComparer<Lobby>.Default.Equals(CurrentLobby, default))
             {
-                CurrentLobby.SetMemberData($"Slot{i}", playerInfoJson);
+                if (isHost)
+                    CurrentLobby.SetData($"Slot{i}", playerInfoJson);
+                else
+                    CurrentLobby.SetMemberData($"Slot{i}", playerInfoJson);
             }
         }
 
