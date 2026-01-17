@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using Steamworks;
 using UnityEngine;
+using Fleeted.patches;
 
 namespace Fleeted
 {
@@ -68,6 +69,8 @@ namespace Fleeted
                 discordIntegration.AddComponent<DiscordIntegration>();
                 DontDestroyOnLoad(discordIntegration);
             }
+
+            MenuLoaded.TrySetupMainMenu();
         }
 
         private void OnGUI()
