@@ -174,92 +174,29 @@ for (int i = 0; i < InputController.inputController.totalControllers; i++)
 [HarmonyPatch(typeof(MainMenuController), "ManageApply")]
 public static class RaiseMenuLimitAndAddApplyPlayFunctionAtManageApply
 {
-    public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+    static void Prefix(MainMenuController __instance, ref int __state)
     {
-        List<CodeInstruction> newInstructions = new List<CodeInstruction>();
-        int line = 0;
+        __state = __instance.selection;
+        __instance.selection = RemapSelection(__instance.selection);
+    }
 
-        Label label64 = il.DefineLabel();
-        Label label72 = il.DefineLabel();
+    static void Postfix(MainMenuController __instance, int __state)
+    {
+        __instance.selection = __state;
+    }
 
-        foreach (CodeInstruction instruction in instructions)
+    private static int RemapSelection(int selection)
+    {
+        return selection switch
         {
-            CodeInstruction newInstruction;
-            if (instruction.opcode == OpCodes.Ldc_I4_2)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Ldc_I4_3);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-                newInstructions.Add(newInstruction);
-            }
-            else if (instruction.opcode == OpCodes.Ldc_I4_3)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Ldc_I4_4);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-                newInstructions.Add(newInstruction);
-            }
-            else if (instruction.opcode == OpCodes.Ldc_I4_4)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Ldc_I4_5);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-                newInstructions.Add(newInstruction);
-            }
-            else if (instruction.opcode == OpCodes.Ldc_I4_5)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Ldc_I4_6);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-                newInstructions.Add(newInstruction);
-            }
-            else if (instruction.opcode == OpCodes.Ldc_I4_6)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Ldc_I4_7);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-                newInstructions.Add(newInstruction);
-            }
-            else if (line == 59 && instruction.opcode == OpCodes.Bne_Un)
-            {
-                newInstruction = new CodeInstruction(OpCodes.Beq_S, label64); // Be Careful with this one
-                newInstructions.Add(newInstruction);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction} -> {newInstruction}");
-            }
-            else if (line == 60 && instruction.opcode == OpCodes.Ldsfld)
-            {
-                var addingInstruction = new CodeInstruction(OpCodes.Ldarg_0);
-                newInstructions.Add(addingInstruction);
-                Plugin.Logger.LogMessage($"ManageApply: ADDING {line++} - {addingInstruction}");
-
-                addingInstruction = new CodeInstruction(OpCodes.Ldfld,
-                    AccessTools.Field(typeof(MainMenuController), nameof(MainMenuController.selection)));
-                newInstructions.Add(addingInstruction);
-                Plugin.Logger.LogMessage($"ManageApply: ADDING {line++} - {addingInstruction}");
-
-                addingInstruction = new CodeInstruction(OpCodes.Ldc_I4_2);
-                newInstructions.Add(addingInstruction);
-                Plugin.Logger.LogMessage($"ManageApply: ADDING {line++} - {addingInstruction}");
-
-                addingInstruction = new CodeInstruction(OpCodes.Bne_Un_S, label72); // Be Careful also with this one
-                newInstructions.Add(addingInstruction);
-                Plugin.Logger.LogMessage($"ManageApply: ADDING {line++} - {addingInstruction}");
-
-                instruction.labels.Add(label64);
-                newInstructions.Add(instruction); // Dont Forget the original instruction
-                Plugin.Logger.LogInfo($"ManageApply: {line} - {instruction}");
-            }
-            else if (line == 72 && instruction.opcode == OpCodes.Ldarg_0)
-            {
-                instruction.labels.Add(label72);
-                newInstructions.Add(instruction);
-                Plugin.Logger.LogWarning($"ManageApply: {line} - {instruction}");
-            }
-            else
-            {
-                newInstructions.Add(instruction);
-                //Plugin.Logger.LogInfo($"ManageApply: {line} - {instruction}");
-            }
-
-            line++;
-        }
-
-        return newInstructions;
+            2 => 5,
+            3 => 2,
+            4 => 3,
+            5 => 4,
+            6 => 5,
+            7 => 6,
+            _ => selection
+        };
     }
 }
 
