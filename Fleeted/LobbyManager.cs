@@ -286,6 +286,8 @@ public class LobbyManager : MonoBehaviour
         var smcInstance = FindObjectOfType<StageMenuController>();
 
         var settingsJson = lobby.GetData("GameSettings");
+        if (string.IsNullOrEmpty(settingsJson))
+            return;
         Settings = JsonUtility.FromJson<GameSettings>(settingsJson);
 
         try
@@ -341,13 +343,21 @@ public class LobbyManager : MonoBehaviour
                 //bots[slot] = true;
                 var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
                 var tmpBots = (bool[]) bots.GetValue(icInstance);
-                tmpBots[slot == 0 ? 0 : slot + 1] =
+                tmpBots[slot + 1] =
                     true; // Make the game think we added a bot to have the slot occupied
                 bots.SetValue(icInstance, tmpBots);
 
-                InputController.inputController.AssignParse(8); // Still dont know how parsing works here but
-                // this number seems to do fine when representing
-                // a net player
+                if (InputController.inputController != null)
+                {
+                    try
+                    {
+                        InputController.inputController.AssignParse(8); // Represents a net player.
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Logger.LogWarning($"Skipping AssignParse for net player: {ex.Message}");
+                    }
+                }
 
                 //activePlayers[slot] = true;
                 var activePlayers =
@@ -408,7 +418,7 @@ public class LobbyManager : MonoBehaviour
                 //bots[slot] = false;
                 var bots = typeof(InputController).GetField("bots", BindingFlags.Instance | BindingFlags.NonPublic);
                 var tmpBots = (bool[]) bots.GetValue(icInstance);
-                tmpBots[slot == 0 ? 0 : slot + 1] =
+                tmpBots[slot + 1] =
                     false; // Make the game think we removed a bot to have the slot unoccupied
                 bots.SetValue(icInstance, tmpBots);
 
@@ -536,11 +546,38 @@ public class LobbyManager : MonoBehaviour
 
         CurrentLobby = lobby;
 
+        if (!isHost)
+            StartCoroutine(SyncLobbyStateWhenReady(lobby));
 
         StartCoroutine(CustomLobbyMenu.Instance.ShowPlayMenuButtons(0f));
 
         Plugin.Logger.LogInfo($"Joined Lobby: {lobby.Id}");
         Plugin.Logger.LogInfo($"Owner: {lobby.Owner.Name}");
+    }
+
+    private IEnumerator SyncLobbyStateWhenReady(Lobby lobby)
+    {
+        var timeout = 5f;
+        while (timeout > 0f)
+        {
+            if (GlobalController.globalController.screen == GlobalController.screens.playmenu
+                && CustomLobbyMenu.Instance != null
+                && CustomLobbyMenu.Instance.playerBoxes != null
+                && CustomLobbyMenu.Instance.playerBoxes.Length > 0
+                && CustomLobbyMenu.Instance.playMenuController != null)
+            {
+                break;
+            }
+
+            timeout -= Time.deltaTime;
+            yield return null;
+        }
+
+        if (GlobalController.globalController.screen != GlobalController.screens.playmenu)
+            yield break;
+
+        GetCharaSelection(lobby);
+        SetStageSettings(lobby);
     }
 
     public static int OccupiedSlotsInPlayMenu(Lobby lobby)

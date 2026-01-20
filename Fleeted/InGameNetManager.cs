@@ -104,7 +104,6 @@ public class InGameNetManager : MonoBehaviour
         }
 
         ReadPackets();
-
         if (GlobalController.globalController.screen != GlobalController.screens.game) return;
 
         if (MainSendTick.TrueDone())
@@ -303,7 +302,7 @@ public class InGameNetManager : MonoBehaviour
 
             var packet = packetReader.ReadPacket();
 
-            if (packet.SteamId == SteamClient.SteamId) return;
+            if (packet.SteamId == SteamClient.SteamId) continue;
 
             using var compressedStream = new MemoryStream(packet.Data);
             using var decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
@@ -495,6 +494,7 @@ public class InGameNetManager : MonoBehaviour
         SteamNetworking.SendP2PPacket(id, packetData, packetData.Length, 0, sendFlags);
     }
 
+
     public void UpdateShipReferences()
     {
         ownedSlots.Clear();
@@ -506,7 +506,6 @@ public class InGameNetManager : MonoBehaviour
         pingMap.Clear();
         killVotes.Clear();
         killVoters.Clear();
-
         var ships = GameState.gameState.playerShips;
         for (var i = 0; i < 8; i++)
         {
@@ -560,6 +559,7 @@ public class InGameNetManager : MonoBehaviour
     {
         return LobbyManager.Instance.Players[slot].OwnerOfCharaId == SteamClient.SteamId;
     }
+
 
     public void OnStartGame(Lobby lobby)
     {

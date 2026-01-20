@@ -181,8 +181,14 @@ public class UpdateDisabledCharasPatch
         {
             if (playerState[i] != 2 && playerPosesion[i + 1] == 0)
             {
-                if (alreadySelectedCharas
-                        [charaSelection[i] + 1]) // TODO: Still dont know how these private lists work (alreadySelectedCharas[charaSelection[i] - 1])
+                var selectedIndex = charaSelection[i] + 1;
+                if (selectedIndex < 0 || selectedIndex >= alreadySelectedCharas.Length)
+                {
+                    __instance.disabledGO[i].SetActive(value: false);
+                    continue;
+                }
+
+                if (alreadySelectedCharas[selectedIndex])
                 {
                     __instance.disabledGO[i].SetActive(value: true);
                 }
@@ -257,6 +263,8 @@ public static class GetOutOfStageMenuIfNotHost
 {
     static void Postfix()
     {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+        
         if (LobbyManager.Instance.isHost)
         {
             LobbyManager.Instance.CurrentLobby.SetData("GameStopped", string.Empty);
