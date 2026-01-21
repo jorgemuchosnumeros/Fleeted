@@ -21,12 +21,13 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
-    public static float PacketDelaySeconds = 0.0725f;
-    public static float PacketDelayJitterSeconds = 0.015f;
+    public static float PacketDelaySeconds = 0.15f;
+    public static float PacketDelayJitterSeconds = 0.025f;
     private const float NetTickRate = 50f;
     private const float MaxStateBufferSeconds = 0.5f;
     private const float CameraSyncRate = 5f;
     public static InGameNetManager Instance;
+    public static float NetTickDeltaSeconds => 1.0f / NetTickRate;
 
     public bool isHost;
     public bool isClient;
@@ -694,6 +695,14 @@ public class InGameNetManager : MonoBehaviour
         pending.RemoveAll(input => input.Sequence <= lastProcessedInput);
     }
 
+    public bool TryGetPendingInputsSnapshot(int slot, out List<InputPacket> pendingInputs)
+    {
+        pendingInputs = null;
+        if (!_pendingLocalInputs.TryGetValue(slot, out var pending)) return false;
+        pendingInputs = new List<InputPacket>(pending);
+        return true;
+    }
+
     public bool TryGetNetInputState(int slot, out bool thrust, out bool turnLeft, out bool turnRight, out bool shootDown)
     {
         if (_netInputsBySlot.TryGetValue(slot, out var state))
@@ -1054,6 +1063,17 @@ public class InGameNetManager : MonoBehaviour
         }
 
         StartNewRoundWhenEveryoneReadyPatch.StartNewRound(instance);
+
+        UpdateShipReferences();
+        if (LobbyManager.Instance.isHost)
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                SendWorldState();
+                SendCameraState();
+                yield return null;
+            }
+        }
 
         GracePeriod.Start();
 

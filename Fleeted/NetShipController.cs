@@ -21,7 +21,7 @@ public class NetShipController : MonoBehaviour
     private Rigidbody2D _rb;
     private bool _isOwned;
     private const int InterpolationDelayTicks = 6;
-    private const float HardSnapDistanceThreshold = 6f;
+    private const float HardSnapDistanceThreshold = 5f;
     private const float CorrectionDurationSeconds = 0.12f;
     private const float OwnedReconcileDistanceThreshold = 0.35f;
     private const float OwnedDriftDistanceThreshold = 0.08f;
@@ -29,6 +29,10 @@ public class NetShipController : MonoBehaviour
     private const float OwnedDriftCorrectionDurationSeconds = 0.4f;
     private const float OwnedMaxPositionCorrectionPerSecond = 5f;
     private const float OwnedMaxVelocityCorrectionPerSecond = 8f;
+    private const float OwnedMaxRotationCorrectionPerSecond = 180f;
+    private const float OwnedReconcileRotationThreshold = 8f;
+    private const float OwnedDriftRotationThreshold = 2f;
+    private const int MaxPredictionSteps = 32;
     private Vector2 _positionCorrection;
     private Vector2 _velocityCorrection;
     private float _rotationCorrection;
@@ -74,66 +78,6 @@ public class NetShipController : MonoBehaviour
         var stick = transform.GetChild(2).GetChild(2);
         stick.localRotation = Quaternion.Euler(new Vector3(0, 0, state.StickRotation));
         transform.rotation = Quaternion.Euler(new Vector3(0, 0, state.Rotation));
-    }
-
-    private void DebugPredict(long ping)
-    {
-        for (var i = 0; i < DebugSteps; i++)
-        {
-            if (_debugTrajectoryPoints[i] == null)
-            {
-                _debugTrajectoryPoints[i] = new GameObject($"Debug Point{i}");
-                var spriteRenderer = _debugTrajectoryPoints[i].AddComponent<SpriteRenderer>();
-
-                spriteRenderer.sprite = CustomLobbyMenu.Instance.pointSprite;
-                spriteRenderer.color = Color.green;
-                spriteRenderer.sortingOrder = 9999;
-            }
-
-            if (_latestState == null)
-                continue;
-
-            _debugTrajectoryPoints[i].transform.localScale = Vector2.one * 0.5f;
-            _debugTrajectoryPoints[i].transform.position = PredictObjectPosition(_latestState.Position,
-                                                               _latestState.Velocity, _latestState.StickRotation,
-                                                               i * (ping / 100f) / DebugSteps) +
-                                                           new Vector2(-1.3f, -1.15f);
-        }
-    }
-
-    public static Vector2 PredictObjectPosition(Vector2 receivedPos, Vector2 receivedVel, float rttSecs,
-        float stickDeg = 0)
-    {
-        if (rttSecs > 0.35f) // Don't Bother on predicting if latency is this big, it's probably going to go way too wrong
-            return receivedPos;
-
-        var perceivedLatencySecs = rttSecs / 1.6f;
-
-        return receivedPos + receivedVel * perceivedLatencySecs;
-
-        // TODO: Predict Circular Movement (Pain)
-        /*
-        if (Mathf.Abs(stickDeg) < 5) // Assume its trajectory is straight
-            return receivedPos + receivedVel * perceivedLatencySecs;
-        
-        var latencyFactor = perceivedLatencySecs * 4f;
-        var rotationStickFactor = (stickDeg > 180 ? stickDeg - 360 : stickDeg) / 750f;
-        
-        var rotationReciprocal = 1 / rotationStickFactor;
-
-        var rRev = rotationReciprocal < 0 ? -1 : 1;
-
-        var invertedRotationReciprocalAbsSqrt = rRev * Mathf.Sqrt(Mathf.Abs(rotationReciprocal));
-        var velPosAtan = (Mathf.Atan2(receivedVel.y - receivedPos.y, receivedVel.x - receivedPos.x) * Mathf.Rad2Deg + 90);
-
-        var rotFx = receivedPos.x + invertedRotationReciprocalAbsSqrt * Mathf.Cos(velPosAtan);
-        var rotFy = receivedPos.y + invertedRotationReciprocalAbsSqrt * Mathf.Sin(velPosAtan);
-
-        var predX = rotFx + invertedRotationReciprocalAbsSqrt * Mathf.Cos(rRev * latencyFactor + velPosAtan + 180);
-        var predY = rotFy + invertedRotationReciprocalAbsSqrt * Mathf.Sin(rRev * latencyFactor + velPosAtan + 180);
-
-        return new Vector2(predX, predY);
-        */
     }
 
     public static void ExplodeNetShip(bool big, ShipController controller, ShipColliderController colliderController)
@@ -228,14 +172,31 @@ public class NetShipController : MonoBehaviour
 
     private void Reconcile(ShipStatePacket packet)
     {
+        var targetPosition = packet.Position;
+        var targetVelocity = packet.Velocity;
+        var targetRotation = packet.Rotation;
+        var targetAngularVelocity = packet.AngularVelocity;
+        if (InGameNetManager.Instance.ownedSlots.Contains(packet.Slot))
+        {
+            InGameNetManager.Instance.AcknowledgeInput(packet.Slot, packet.LastProcessedInput);
+            if (TryPredictOwnedState(packet, out var predicted))
+            {
+                targetPosition = predicted.Position;
+                targetVelocity = predicted.Velocity;
+                targetRotation = predicted.Rotation;
+                targetAngularVelocity = predicted.AngularVelocity;
+            }
+        }
+
         var position = transform.position;
-        var discrepancy = Vector2.Distance(position, packet.Position);
+        var discrepancy = Vector2.Distance(position, targetPosition);
+        var rotationDiscrepancy = Mathf.Abs(Mathf.DeltaAngle(transform.eulerAngles.z, targetRotation));
         if (discrepancy > HardSnapDistanceThreshold)
         {
-            transform.position = packet.Position;
-            _rb.velocity = packet.Velocity;
-            _rb.angularVelocity = packet.AngularVelocity;
-            transform.rotation = Quaternion.Euler(new Vector3(0, 0, packet.Rotation));
+            transform.position = targetPosition;
+            _rb.velocity = targetVelocity;
+            _rb.angularVelocity = targetAngularVelocity;
+            transform.rotation = Quaternion.Euler(new Vector3(0, 0, targetRotation));
             _positionCorrection = Vector2.zero;
             _velocityCorrection = Vector2.zero;
             _rotationCorrection = 0f;
@@ -244,17 +205,33 @@ public class NetShipController : MonoBehaviour
         }
         else if (discrepancy > OwnedReconcileDistanceThreshold)
         {
-            _positionCorrection = packet.Position - (Vector2) transform.position;
-            _velocityCorrection = packet.Velocity - _rb.velocity;
-            _rotationCorrection = 0f;
+            _positionCorrection = targetPosition - (Vector2) transform.position;
+            _velocityCorrection = targetVelocity - _rb.velocity;
+            _rotationCorrection = Mathf.DeltaAngle(transform.eulerAngles.z, targetRotation);
             _correctionTimeRemaining = OwnedCorrectionDurationSeconds;
             _applyVelocityCorrection = true;
         }
         else if (discrepancy > OwnedDriftDistanceThreshold)
         {
-            _positionCorrection = packet.Position - (Vector2) transform.position;
+            _positionCorrection = targetPosition - (Vector2) transform.position;
             _velocityCorrection = Vector2.zero;
-            _rotationCorrection = 0f;
+            _rotationCorrection = Mathf.DeltaAngle(transform.eulerAngles.z, targetRotation);
+            _correctionTimeRemaining = OwnedDriftCorrectionDurationSeconds;
+            _applyVelocityCorrection = false;
+        }
+        else if (rotationDiscrepancy > OwnedReconcileRotationThreshold)
+        {
+            _positionCorrection = Vector2.zero;
+            _velocityCorrection = Vector2.zero;
+            _rotationCorrection = Mathf.DeltaAngle(transform.eulerAngles.z, targetRotation);
+            _correctionTimeRemaining = OwnedCorrectionDurationSeconds;
+            _applyVelocityCorrection = false;
+        }
+        else if (rotationDiscrepancy > OwnedDriftRotationThreshold)
+        {
+            _positionCorrection = Vector2.zero;
+            _velocityCorrection = Vector2.zero;
+            _rotationCorrection = Mathf.DeltaAngle(transform.eulerAngles.z, targetRotation);
             _correctionTimeRemaining = OwnedDriftCorrectionDurationSeconds;
             _applyVelocityCorrection = false;
         }
@@ -266,11 +243,190 @@ public class NetShipController : MonoBehaviour
         {
             _controller.bullets = packet.Ammo;
         }
+    }
 
-        if (InGameNetManager.Instance.ownedSlots.Contains(packet.Slot))
+    private bool TryPredictOwnedState(ShipStatePacket baseState, out ShipStatePacket predicted)
+    {
+        predicted = baseState;
+        if (!InGameNetManager.Instance.TryGetPendingInputsSnapshot(baseState.Slot, out var pending))
+            return false;
+
+        if (pending.Count == 0)
+            return false;
+
+        pending.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
+
+        var startIndex = Mathf.Max(0, pending.Count - MaxPredictionSteps);
+        var dt = InGameNetManager.NetTickDeltaSeconds;
+
+        var position = baseState.Position;
+        var velocity = baseState.Velocity;
+        var rotation = baseState.Rotation;
+        var angularVelocity = baseState.AngularVelocity;
+        var stickRotation = baseState.StickRotation;
+        var continuousRotationTimer = Mathf.Abs(NormalizeStickRotation(stickRotation)) >= 5f ? 0.8f : 0f;
+        var thrustSpeed = GetThrustSpeed();
+        var maxMagnitude = GetMaxMagnitude();
+        const float turnSpeed = 60f;
+        var mass = _rb != null ? _rb.mass : 1f;
+        var fixedDt = Time.fixedDeltaTime > 0f ? Time.fixedDeltaTime : InGameNetManager.NetTickDeltaSeconds;
+
+        for (var i = startIndex; i < pending.Count; i++)
         {
-            InGameNetManager.Instance.AcknowledgeInput(packet.Slot, packet.LastProcessedInput);
+            ApplyPredictedInput(pending[i], fixedDt, thrustSpeed, maxMagnitude, turnSpeed, mass, ref position,
+                ref velocity, ref rotation, ref angularVelocity, ref stickRotation, ref continuousRotationTimer);
         }
+
+        predicted.Position = position;
+        predicted.Velocity = velocity;
+        predicted.Rotation = rotation;
+        predicted.AngularVelocity = angularVelocity;
+        return true;
+    }
+
+    private static void ApplyPredictedInput(InputPacket input, float dt, float thrustSpeed, float maxMagnitude,
+        float turnSpeed, float mass, ref Vector2 position, ref Vector2 velocity, ref float rotation,
+        ref float angularVelocity, ref float stickRotation, ref float continuousRotationTimer)
+    {
+        var rotationRad = rotation * Mathf.Deg2Rad;
+        if (input.Thrust)
+        {
+            var forward = new Vector2(Mathf.Sin(rotationRad), Mathf.Cos(rotationRad));
+            var forceToAdd = forward * (thrustSpeed * mass * dt);
+            velocity += forceToAdd * (dt / mass);
+        }
+
+        UpdateStickRotation(input, dt, ref stickRotation, ref continuousRotationTimer, out var boostL, out var boostR);
+        angularVelocity += ComputeAngularVelocityDelta(stickRotation, boostL, boostR, angularVelocity, turnSpeed);
+        rotation = Mathf.Repeat(rotation + angularVelocity * dt, 360f);
+
+        var speed = velocity.magnitude;
+        if (speed > maxMagnitude)
+            velocity = velocity * (maxMagnitude / speed);
+
+        position += velocity * dt;
+    }
+
+    private static float NormalizeStickRotation(float stickRotation)
+    {
+        var rotation = stickRotation;
+        if (rotation > 300f)
+            rotation -= 360f;
+        return rotation;
+    }
+
+    private static void UpdateStickRotation(InputPacket input, float dt, ref float stickRotation,
+        ref float continuousRotationTimer, out bool boostL, out bool boostR)
+    {
+        boostL = false;
+        boostR = false;
+
+        var normalized = NormalizeStickRotation(stickRotation);
+        var hasInput = input.TurnLeft || input.TurnRight;
+        if (hasInput)
+        {
+            continuousRotationTimer = Mathf.Min(0.8f, continuousRotationTimer + dt);
+            var speedFactor = Mathf.Clamp(0.6f + continuousRotationTimer, 0.7f, 1.4f);
+            var stickSpeed = 60f * speedFactor;
+
+            if (input.TurnLeft)
+            {
+                normalized += stickSpeed * dt;
+                if (normalized > 20f && normalized < 300f)
+                    normalized = 20f;
+                boostL = true;
+            }
+
+            if (input.TurnRight)
+            {
+                normalized -= stickSpeed * dt;
+                if (normalized < 340f && normalized > 300f)
+                    normalized = 340f;
+                boostR = true;
+            }
+        }
+        else
+        {
+            continuousRotationTimer = Mathf.Max(0f, continuousRotationTimer - dt * 2f);
+            if (normalized < 3f && normalized > -3f)
+            {
+                normalized = 0f;
+            }
+            else if (normalized > 0f && normalized < 5f)
+            {
+                normalized -= 10f * dt;
+                if (normalized > 300f)
+                    normalized = 0f;
+            }
+            else if (normalized < 0f && normalized > -5f)
+            {
+                normalized += 10f * dt;
+                if (normalized < 10f)
+                    normalized = 0f;
+            }
+        }
+
+        stickRotation = Mathf.Repeat(normalized, 360f);
+    }
+
+    private static float ComputeAngularVelocityDelta(float stickRotation, bool boostL, bool boostR,
+        float angularVelocity, float turnSpeed)
+    {
+        var turnQuantity = NormalizeStickRotation(stickRotation);
+        if (Mathf.Abs(turnQuantity) < 0.035f)
+            turnQuantity = 0f;
+
+        turnQuantity *= 6f;
+        if (turnQuantity >= 120f && boostL)
+            turnQuantity += 50f;
+        else if (turnQuantity <= -120f && boostR)
+            turnQuantity -= 50f;
+
+        if (angularVelocity >= 0f && turnQuantity > 0f)
+        {
+            if (turnQuantity > angularVelocity)
+                return Mathf.Clamp(turnSpeed / 6f, 0f, 160f - angularVelocity);
+            if (turnQuantity < angularVelocity)
+                return -Mathf.Clamp(turnSpeed / 6f, 0f, angularVelocity - turnQuantity);
+            return 0f;
+        }
+
+        if (angularVelocity <= 0f && turnQuantity < 0f)
+        {
+            if (turnQuantity < angularVelocity)
+                return -Mathf.Clamp(turnSpeed / 6f, 0f, 160f + angularVelocity);
+            if (turnQuantity > angularVelocity)
+                return Mathf.Clamp(turnSpeed / 6f, 0f, turnQuantity - angularVelocity);
+            return 0f;
+        }
+
+        if (angularVelocity > 0f && turnQuantity < 0f)
+            return -Mathf.Clamp(turnSpeed / 6f, 0f, 160f + angularVelocity);
+
+        if (angularVelocity < 0f && turnQuantity > 0f)
+            return Mathf.Clamp(turnSpeed / 6f, 0f, 160f - angularVelocity);
+
+        return 0f;
+    }
+
+    private float GetThrustSpeed()
+    {
+        if (GlobalController.globalController.mode == GlobalController.modes.leader
+            && GameState.gameState != null
+            && GameState.gameState.leaderPlayer == _controller.playerN)
+            return 900f;
+
+        return 1000f;
+    }
+
+    private float GetMaxMagnitude()
+    {
+        if (GlobalController.globalController.mode == GlobalController.modes.leader
+            && GameState.gameState != null
+            && GameState.gameState.leaderPlayer == _controller.playerN)
+            return 9f;
+
+        return 11f;
     }
 
     private void ApplyOwnedCorrections()
@@ -288,6 +444,14 @@ public class NetShipController : MonoBehaviour
             var velocityStep = Vector2.ClampMagnitude(_velocityCorrection, maxVelStep);
             _rb.velocity += velocityStep;
             _velocityCorrection -= velocityStep;
+        }
+
+        if (Mathf.Abs(_rotationCorrection) > 0.001f)
+        {
+            var maxRotStep = OwnedMaxRotationCorrectionPerSecond * Time.deltaTime;
+            var rotStep = Mathf.Clamp(_rotationCorrection, -maxRotStep, maxRotStep);
+            transform.rotation = Quaternion.Euler(new Vector3(0, 0, transform.eulerAngles.z + rotStep));
+            _rotationCorrection -= rotStep;
         }
 
         _correctionTimeRemaining -= Time.deltaTime;

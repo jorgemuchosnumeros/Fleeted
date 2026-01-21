@@ -15,7 +15,7 @@ public class NetBulletController : MonoBehaviour
     private bool _isOwned;
     private int _netId;
     private const int InterpolationDelayTicks = 6;
-    private const float ReconcileDistanceThreshold = 0.5f;
+    private const float ReconcileDistanceThreshold = 0.2f;
 
     private void Awake()
     {
