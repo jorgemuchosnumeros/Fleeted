@@ -21,7 +21,11 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
-    private const float ArtificialLatency = 0f;
+    public static float PacketDelaySeconds = 0.0725f;
+    public static float PacketDelayJitterSeconds = 0.015f;
+    private const float NetTickRate = 50f;
+    private const float MaxStateBufferSeconds = 0.5f;
+    private const float CameraSyncRate = 5f;
     public static InGameNetManager Instance;
 
     public bool isHost;
@@ -36,10 +40,10 @@ public class InGameNetManager : MonoBehaviour
     private readonly Dictionary<int, Dictionary<int, BulletController>> bulletsSlots = new();
     public readonly Dictionary<int, NetShipController> controllersSlots = new();
     public readonly TimedAction GracePeriod = new(3.5f);
-    private readonly Dictionary<ulong, HashSet<int>> killVoters = new();
-    private readonly Dictionary<int, int> killVotes = new();
 
-    public readonly TimedAction MainSendTick = new(1.0f / 10);
+    public readonly TimedAction NetSendTick = new(1.0f / NetTickRate);
+    private readonly TimedAction _cameraSyncTick = new(1.0f / CameraSyncRate);
+    private readonly TimedAction _netDebugLogTick = new(1.0f);
 
     public readonly Dictionary<SteamId, long> pingMap = new();
     public readonly TimedAction PingSendTick = new(1.0f);
@@ -54,7 +58,40 @@ public class InGameNetManager : MonoBehaviour
     private long _serverClientTimeDiff;
     private long _startTime;
 
-    public HashSet<BulletController> ownedLiveBullets = new();
+    private int _serverTick;
+    private int _latestServerTick;
+    private float _latestServerTickTime;
+
+    private readonly Dictionary<int, int> _localInputSequences = new();
+    private readonly Dictionary<int, List<InputPacket>> _pendingLocalInputs = new();
+    private readonly Dictionary<int, NetInputState> _netInputsBySlot = new();
+    private readonly Dictionary<int, int> _lastProcessedInput = new();
+    private readonly Dictionary<int, int> _bulletNetIds = new();
+    private readonly Dictionary<int, BulletController> _bulletByNetId = new();
+    private readonly Dictionary<Vector2, TileLandController> _tileByPosition = new();
+    private int _inputsSent;
+    private int _inputsReceived;
+    private int _worldStatesSent;
+    private int _worldStatesReceived;
+    private int _packetsReceived;
+    private int _packetErrors;
+    private int _lastWorldStateBytes;
+    private int _lastWorldStateShips;
+    private int _lastWorldStateBullets;
+    private readonly Dictionary<int, bool> _lastShootHeld = new();
+    private const float CameraCorrectionDurationSeconds = 0.2f;
+    private const float CameraSnapDistanceThreshold = 6f;
+    private Vector3 _cameraPositionCorrection;
+    private float _cameraSizeCorrection;
+    private float _cameraCorrectionTimeRemaining;
+
+    private sealed class NetInputState
+    {
+        public bool Thrust;
+        public bool TurnLeft;
+        public bool TurnRight;
+        public bool ShootDown;
+    }
 
     public bool inGame => GlobalController.globalController.screen switch
     {
@@ -106,13 +143,15 @@ public class InGameNetManager : MonoBehaviour
         ReadPackets();
         if (GlobalController.globalController.screen != GlobalController.screens.game) return;
 
-        if (MainSendTick.TrueDone())
+        if (NetSendTick.TrueDone())
         {
-            SendShipUpdates();
+            SendInputUpdates();
+            if (isHost)
+            {
+                SendWorldState();
+            }
 
-            SendProjectileUpdates();
-
-            MainSendTick.Start();
+            NetSendTick.Start();
         }
 
         if (PingSendTick.TrueDone())
@@ -120,6 +159,33 @@ public class InGameNetManager : MonoBehaviour
             SendPingPacket(false);
 
             PingSendTick.Start();
+        }
+
+        if (!isHost)
+        {
+            ApplyCameraCorrections();
+        }
+
+        if (isHost && _cameraSyncTick.TrueDone())
+        {
+            SendCameraState();
+            _cameraSyncTick.Start();
+        }
+
+        if (_netDebugLogTick.TrueDone())
+        {
+            Plugin.Logger.LogInfo(
+                $"NetDebug: inputs sent={_inputsSent}, recv={_inputsReceived}, world sent={_worldStatesSent}, recv={_worldStatesReceived}, packets={_packetsReceived}, errors={_packetErrors}, world bytes={_lastWorldStateBytes}, ships={_lastWorldStateShips}, bullets={_lastWorldStateBullets}");
+            _inputsSent = 0;
+            _inputsReceived = 0;
+            _worldStatesSent = 0;
+            _worldStatesReceived = 0;
+            _packetsReceived = 0;
+            _packetErrors = 0;
+            _lastWorldStateBytes = 0;
+            _lastWorldStateShips = 0;
+            _lastWorldStateBullets = 0;
+            _netDebugLogTick.Start();
         }
     }
 
@@ -163,9 +229,24 @@ public class InGameNetManager : MonoBehaviour
 
     public void ResetState()
     {
-        MainSendTick.Start();
+        NetSendTick.Start();
+        _cameraSyncTick.Start();
+        _netDebugLogTick.Start();
         PingSendTick.Start();
         _pingStopwatch.Start();
+        _serverTick = 0;
+        _latestServerTick = 0;
+        _latestServerTickTime = 0f;
+        _inputsSent = 0;
+        _inputsReceived = 0;
+        _worldStatesSent = 0;
+        _worldStatesReceived = 0;
+        _packetsReceived = 0;
+        _packetErrors = 0;
+        _lastWorldStateBytes = 0;
+        _lastWorldStateShips = 0;
+        _lastWorldStateBullets = 0;
+        _lastShootHeld.Clear();
 
         LobbyManager.Instance.Players.Clear();
 
@@ -189,75 +270,151 @@ public class InGameNetManager : MonoBehaviour
         isClient = true;
     }
 
-    private void SendShipUpdates()
+    private void SendInputUpdates()
     {
-        var bulkShipUpdate = new BulkShipUpdate
-        {
-            Updates = new List<ShipPacket>(),
-        };
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+        if (InputController.inputController == null) return;
 
         foreach (var slot in ownedSlots)
         {
-            var ship = LobbyManager.Instance.Players[slot].InGameShip;
-            var position = ship.transform.position;
-            var stickT = ship.transform.GetChild(2).GetChild(2);
+            var inputIndex = slot + 1;
+            var thrust = InputController.inputController.inputs[InputController.inputController.sA[inputIndex]];
+            var turnLeft = InputController.inputController.inputs[InputController.inputController.sL[inputIndex]];
+            var turnRight = InputController.inputController.inputs[InputController.inputController.sR[inputIndex]];
+            var shootHeld = InputController.inputController.inputs[InputController.inputController.sB[inputIndex]] ||
+                            InputController.inputController.inputs[InputController.inputController.sX[inputIndex]];
+            var shootDown = InputController.inputController.inputs[InputController.inputController.sBDown[inputIndex]] ||
+                            InputController.inputController.inputs[InputController.inputController.sXDown[inputIndex]];
+            if (!_lastShootHeld.TryGetValue(slot, out var wasHeld))
+                wasHeld = false;
 
-            var shipPacket = new ShipPacket
+            var inputPacket = new InputPacket
             {
-                Position = new Vector2(position.x, position.y),
-                Rotation = ship.transform.rotation.eulerAngles.z,
                 Slot = slot,
-                StickRotation = stickT.localRotation.eulerAngles.z,
-                Velocity = new Vector2(rbSlots[slot].velocity.x, rbSlots[slot].velocity.y),
+                Sequence = ++_localInputSequences[slot],
+                Thrust = thrust,
+                TurnLeft = turnLeft,
+                TurnRight = turnRight,
+                Shoot = shootDown || (shootHeld && !wasHeld),
             };
 
-            bulkShipUpdate.Updates.Add(shipPacket);
+            _lastShootHeld[slot] = shootHeld;
+
+            _pendingLocalInputs[slot].Add(inputPacket);
+            _inputsSent++;
+
+            if (isHost)
+            {
+                _lastProcessedInput[slot] = inputPacket.Sequence;
+                continue;
+            }
+
+            using MemoryStream memoryStream = new MemoryStream();
+            using (var writer = new ProtocolWriter(memoryStream))
+            {
+                writer.Write(inputPacket);
+            }
+
+            var data = memoryStream.ToArray();
+            var hostId = LobbyManager.Instance.CurrentLobby.Owner.Id;
+
+            SendPacketToSomeone(SteamClient.SteamId, hostId, data, PacketType.InputUpdate, P2PSend.Unreliable);
         }
-
-        using MemoryStream memoryStream = new MemoryStream();
-        using (var writer = new ProtocolWriter(memoryStream))
-        {
-            writer.Write(bulkShipUpdate);
-        }
-
-        var data = memoryStream.ToArray();
-
-        SendPacket2All(SteamClient.SteamId, data, PacketType.ShipUpdate, P2PSend.Unreliable);
     }
 
-    private void SendProjectileUpdates()
+    private void SendWorldState()
     {
-        if (!ownedLiveBullets.Any()) return;
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
 
-        var bulkProjectileUpdate = new BulkProjectileUpdate
+        var worldState = new WorldStatePacket
         {
-            Updates = new List<UpdateProjectilePacket>(),
+            ServerTick = _serverTick,
+            Ships = new List<ShipStatePacket>(),
+            Bullets = new List<BulletStatePacket>(),
         };
 
-        foreach (var bc in ownedLiveBullets)
+        foreach (var slot in LobbyManager.Instance.Players.Keys)
         {
-            if (!rbBullets.ContainsKey(bc.GetInstanceID())) continue;
+            var ship = LobbyManager.Instance.Players[slot].InGameShip;
+            if (ship == null || !rbSlots.ContainsKey(slot)) continue;
 
-            var updateProjectilePacket = new UpdateProjectilePacket()
+            var stickT = ship.transform.GetChild(2).GetChild(2);
+            var shipController = ship.GetComponent<ShipController>();
+            worldState.Ships.Add(new ShipStatePacket
             {
-                Id = bc.GetInstanceID(),
-                Position = bc.transform.position,
-                SourceShip = bc.player - 1,
-                Velocity = rbBullets[bc.GetInstanceID()].velocity,
-            };
+                Slot = slot,
+                ServerTick = _serverTick,
+                Position = ship.transform.position,
+                Velocity = rbSlots[slot].velocity,
+                Rotation = ship.transform.rotation.eulerAngles.z,
+                StickRotation = stickT.localRotation.eulerAngles.z,
+                AngularVelocity = rbSlots[slot].angularVelocity,
+                LastProcessedInput = _lastProcessedInput.TryGetValue(slot, out var lastInput) ? lastInput : 0,
+                Ammo = shipController != null ? shipController.bullets : 0,
+            });
+        }
 
-            bulkProjectileUpdate.Updates.Add(updateProjectilePacket);
+        foreach (var slotBullets in bulletsSlots.Values)
+        {
+            foreach (var bulletEntry in slotBullets)
+            {
+                var netId = bulletEntry.Key;
+                var bullet = bulletEntry.Value;
+                if (bullet == null) continue;
+
+                if (!rbBullets.TryGetValue(netId, out var rb)) continue;
+
+                if (!bullet.gameObject.activeSelf) continue;
+
+                worldState.Bullets.Add(new BulletStatePacket
+                {
+                    NetId = netId,
+                    ServerTick = _serverTick,
+                    Position = bullet.transform.position,
+                    Velocity = rb.velocity,
+                    Active = true,
+                });
+            }
         }
 
         using MemoryStream memoryStream = new MemoryStream();
         using (var writer = new ProtocolWriter(memoryStream))
         {
-            writer.Write(bulkProjectileUpdate);
+            writer.Write(worldState);
         }
 
         var data = memoryStream.ToArray();
+        SendPacket2All(SteamClient.SteamId, data, PacketType.WorldState, P2PSend.Unreliable);
+        _worldStatesSent++;
+        _lastWorldStateBytes = data.Length;
+        _lastWorldStateShips = worldState.Ships.Count;
+        _lastWorldStateBullets = worldState.Bullets.Count;
 
-        SendPacket2All(SteamClient.SteamId, data, PacketType.ProjectileUpdate, P2PSend.Unreliable);
+        _serverTick++;
+    }
+
+    private void SendCameraState()
+    {
+        if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+
+        var cameraController = FindObjectOfType<CameraController>();
+        if (cameraController == null || cameraController.cam == null) return;
+
+        var cameraState = new CameraStatePacket
+        {
+            ServerTick = _serverTick,
+            Position = cameraController.camT.position,
+            OrthographicSize = cameraController.cam.orthographicSize,
+        };
+
+        using MemoryStream memoryStream = new MemoryStream();
+        using (var writer = new ProtocolWriter(memoryStream))
+        {
+            writer.Write(cameraState);
+        }
+
+        var data = memoryStream.ToArray();
+        SendPacket2All(SteamClient.SteamId, data, PacketType.CameraState, P2PSend.Unreliable);
     }
 
     private void SendPingPacket(bool response, ulong sender = 0, P2PSend flag = P2PSend.Reliable)
@@ -290,120 +447,40 @@ public class InGameNetManager : MonoBehaviour
     {
         while (SteamNetworking.IsP2PPacketAvailable())
         {
-            var rawPacket = SteamNetworking.ReadP2PPacket();
-
-            if (rawPacket == null) return;
-
-            var value = rawPacket.Value;
-            var data = value.Data;
-
-            using var memStream = new MemoryStream(data);
-            using var packetReader = new ProtocolReader(memStream);
-
-            var packet = packetReader.ReadPacket();
-
-            if (packet.SteamId == SteamClient.SteamId) continue;
-
-            using var compressedStream = new MemoryStream(packet.Data);
-            using var decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
-            using var dataStream = new ProtocolReader(decompressStream);
-
-            switch (packet.Id)
+            try
             {
-                case PacketType.ShipUpdate:
-                    var bulkShipPacket = dataStream.ReadBulkShipUpdate();
+                var rawPacket = SteamNetworking.ReadP2PPacket();
 
-                    foreach (var shipPacket in bulkShipPacket.Updates)
-                    {
-                        if (ownedSlots.Contains(shipPacket.Slot)) break;
+                if (rawPacket == null) return;
 
-                        if (controllersSlots.TryGetValue(shipPacket.Slot, out var controller))
-                            controller.UpdatePosition(shipPacket, PacketType.ShipUpdate);
-                        else
-                            Plugin.Logger.LogError($"{shipPacket.Slot} not found");
-                    }
+                var value = rawPacket.Value;
+                var data = value.Data;
 
-                    break;
+                using var memStream = new MemoryStream(data);
+                using var packetReader = new ProtocolReader(memStream);
+
+                var packet = packetReader.ReadPacket();
+
+                if (packet.SteamId == SteamClient.SteamId) continue;
+
+                _packetsReceived++;
+
+                using var compressedStream = new MemoryStream(packet.Data);
+                using var decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
+                using var dataStream = new ProtocolReader(decompressStream);
+
+                if (packet.Id == PacketType.WorldState)
+                {
+                    _lastWorldStateBytes = packet.Data.Length;
+                }
+
+                switch (packet.Id)
+                {
                 case PacketType.Death:
                     var deathPacket = dataStream.ReadDeathPacket();
                     var target = deathPacket.TargetShip;
 
-                    if (ownedSlots.Contains(target)) break;
-
                     controllersSlots[target].Explode(deathPacket);
-                    break;
-                case PacketType.Kill:
-                    var killPacket = dataStream.ReadKillPacket();
-                    var defendant = killPacket.TargetShip;
-                    var prosecutor = packet.SteamId;
-
-                    if (!ownedSlots.Contains(defendant)) break;
-
-                    var memberCount = LobbyManager.Instance.CurrentLobby.Members.Count();
-                    var voteLimit = memberCount / 2 + 1;
-
-                    var repeatedVote = false;
-                    if (killVoters.TryGetValue(prosecutor, out _))
-                    {
-                        if (!killVoters[prosecutor].Add(defendant))
-                        {
-                            repeatedVote = true;
-                        }
-                    }
-                    else
-                    {
-                        killVoters.Add(prosecutor, new HashSet<int> {defendant});
-                    }
-
-                    if (!repeatedVote)
-                    {
-                        if (killVotes.TryGetValue(defendant, out _))
-                            killVotes[defendant]++;
-                        else
-                            killVotes.Add(defendant, 1);
-                    }
-
-
-                    Plugin.Logger.LogInfo(
-                        $"{defendant} is accused of unreliably dying, votes: {killVotes[defendant]}/{memberCount / 2 + 1}");
-
-                    if (killVotes[defendant] >= voteLimit)
-                    {
-                        var player = LobbyManager.Instance.Players[defendant].InGameShip;
-                        var controller = player.GetComponent<ShipController>();
-                        var ccontroller = player.GetComponent<ShipColliderController>();
-
-                        Plugin.Logger.LogInfo($"Killed {killPacket.TargetShip} by vote");
-
-                        NetShipController.ExplodeNetShip(killPacket.IsExplosionBig, controller, ccontroller);
-                    }
-
-                    break;
-                case PacketType.SpawnProjectile:
-                    var spawnProjectilePacket = dataStream.ReadSpawnProjectilePacket();
-                    var slot = spawnProjectilePacket.SourceShip;
-
-                    if (ownedSlots.Contains(slot)) break;
-
-                    if (controllersSlots.TryGetValue(slot, out var sppc))
-                    {
-                        sppc.SpawnProjectile(spawnProjectilePacket);
-                    }
-
-                    break;
-                case PacketType.ProjectileUpdate:
-                    var bulkProjectileUpdate = dataStream.ReadBulkProjectileUpdate();
-
-                    foreach (var projectilePacket in bulkProjectileUpdate.Updates)
-                    {
-                        if (ownedSlots.Contains(projectilePacket.SourceShip)) continue;
-
-                        if (bulletControllers.TryGetValue(projectilePacket.Id, out var bcontroller))
-                        {
-                            bcontroller.ReceiveUpdates(projectilePacket);
-                        }
-                    }
-
                     break;
                 case PacketType.Ping:
                     var pingPacket = dataStream.ReadPingPacket();
@@ -425,6 +502,70 @@ public class InGameNetManager : MonoBehaviour
                     }
 
                     break;
+                case PacketType.InputUpdate:
+                    if (!isHost) break;
+                    var inputPacket = dataStream.ReadInputPacket();
+                    _inputsReceived++;
+                    if (!_netInputsBySlot.TryGetValue(inputPacket.Slot, out var state))
+                    {
+                        state = new NetInputState();
+                        _netInputsBySlot[inputPacket.Slot] = state;
+                    }
+
+                    state.Thrust = inputPacket.Thrust;
+                    state.TurnLeft = inputPacket.TurnLeft;
+                    state.TurnRight = inputPacket.TurnRight;
+                    if (inputPacket.Shoot)
+                        state.ShootDown = true;
+
+                    _lastProcessedInput[inputPacket.Slot] = inputPacket.Sequence;
+                    break;
+                case PacketType.WorldState:
+                    var worldState = dataStream.ReadWorldStatePacket();
+                    _worldStatesReceived++;
+                    RecordServerTick(worldState.ServerTick);
+                    _lastWorldStateShips = worldState.Ships.Count;
+                    _lastWorldStateBullets = worldState.Bullets.Count;
+
+                    foreach (var shipState in worldState.Ships)
+                    {
+                        if (controllersSlots.TryGetValue(shipState.Slot, out var netController))
+                        {
+                            netController.ReceiveState(shipState);
+                        }
+                    }
+
+                    foreach (var bulletState in worldState.Bullets)
+                    {
+                        if (bulletControllers.TryGetValue(bulletState.NetId, out var bulletController))
+                        {
+                            bulletController.ReceiveState(bulletState);
+                        }
+                    }
+
+                    break;
+                case PacketType.BulletDestroy:
+                    var bulletDestroyPacket = dataStream.ReadBulletDestroyPacket();
+                    if (bulletControllers.TryGetValue(bulletDestroyPacket.NetId, out var netBulletController))
+                    {
+                        netBulletController.Explode();
+                    }
+                    break;
+                case PacketType.TileDestroy:
+                    var tileDestroyPacket = dataStream.ReadTileDestroyPacket();
+                    DisableTileAt(tileDestroyPacket.Position);
+                    break;
+                case PacketType.CameraState:
+                    var cameraStatePacket = dataStream.ReadCameraStatePacket();
+                    RecordServerTick(cameraStatePacket.ServerTick);
+                    ApplyCameraState(cameraStatePacket);
+                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _packetErrors++;
+                Plugin.Logger.LogWarning($"Packet read error: {ex}");
             }
         }
     }
@@ -489,9 +630,200 @@ public class InGameNetManager : MonoBehaviour
 
     private static IEnumerator SendP2PPacket(SteamId id, byte[] packetData, P2PSend sendFlags)
     {
-        yield return new WaitForSeconds(ArtificialLatency);
+        var delay = PacketDelaySeconds;
+        if (PacketDelayJitterSeconds > 0f)
+        {
+            delay += UnityEngine.Random.Range(0f, PacketDelayJitterSeconds);
+        }
+
+        if (delay > 0f)
+        {
+            yield return new WaitForSeconds(delay);
+        }
 
         SteamNetworking.SendP2PPacket(id, packetData, packetData.Length, 0, sendFlags);
+    }
+
+    public static void ConfigurePacketDelay(float baseSeconds, float jitterSeconds = 0f)
+    {
+        PacketDelaySeconds = Mathf.Max(0f, baseSeconds);
+        PacketDelayJitterSeconds = Mathf.Max(0f, jitterSeconds);
+        Plugin.Logger.LogInfo(
+            $"Packet delay configured: base={PacketDelaySeconds:0.000}s jitter={PacketDelayJitterSeconds:0.000}s");
+    }
+
+    public int MaxBufferTicks => Mathf.CeilToInt(MaxStateBufferSeconds * NetTickRate);
+
+    public int GetEstimatedServerTick()
+    {
+        if (_latestServerTickTime <= 0f) return _latestServerTick;
+        var delta = Time.time - _latestServerTickTime;
+        return _latestServerTick + Mathf.FloorToInt(delta * NetTickRate);
+    }
+
+    public void RecordServerTick(int serverTick)
+    {
+        _latestServerTick = serverTick;
+        _latestServerTickTime = Time.time;
+    }
+
+    public void ApplyNetInputs(InputController controller)
+    {
+        if (!isHost || !isClient) return;
+        if (GlobalController.globalController.screen != GlobalController.screens.game) return;
+
+        foreach (var kvp in _netInputsBySlot)
+        {
+            var slot = kvp.Key;
+            var state = kvp.Value;
+            var inputIndex = slot + 1;
+
+            controller.inputs[controller.sA[inputIndex]] = state.Thrust;
+            controller.inputs[controller.sL[inputIndex]] = state.TurnLeft;
+            controller.inputs[controller.sR[inputIndex]] = state.TurnRight;
+            controller.inputs[controller.sBDown[inputIndex]] = state.ShootDown;
+            controller.inputs[controller.sB[inputIndex]] = state.ShootDown;
+
+            state.ShootDown = false;
+        }
+    }
+
+    public void AcknowledgeInput(int slot, int lastProcessedInput)
+    {
+        if (!_pendingLocalInputs.TryGetValue(slot, out var pending)) return;
+        pending.RemoveAll(input => input.Sequence <= lastProcessedInput);
+    }
+
+    public bool TryGetNetInputState(int slot, out bool thrust, out bool turnLeft, out bool turnRight, out bool shootDown)
+    {
+        if (_netInputsBySlot.TryGetValue(slot, out var state))
+        {
+            thrust = state.Thrust;
+            turnLeft = state.TurnLeft;
+            turnRight = state.TurnRight;
+            shootDown = state.ShootDown;
+            return true;
+        }
+
+        thrust = false;
+        turnLeft = false;
+        turnRight = false;
+        shootDown = false;
+        return false;
+    }
+
+    public void ConsumeShootDown(int slot)
+    {
+        if (_netInputsBySlot.TryGetValue(slot, out var state))
+        {
+            state.ShootDown = false;
+        }
+    }
+
+    public int? GetBulletNetId(BulletController controller)
+    {
+        var instanceId = controller.GetInstanceID();
+        return _bulletNetIds.TryGetValue(instanceId, out var netId) ? netId : null;
+    }
+
+    private void DisableTileAt(Vector2 position)
+    {
+        var key = QuantizeTilePosition(position);
+
+        if (_tileByPosition.Count == 0)
+        {
+            BuildTileMap();
+        }
+
+        if (_tileByPosition.TryGetValue(key, out var tile) && tile != null)
+        {
+            Fleeted.patches.SyncTileDestroyPatch.SuppressNetSend = true;
+            tile.DisableTile();
+            Fleeted.patches.SyncTileDestroyPatch.SuppressNetSend = false;
+            return;
+        }
+
+        var tiles = FindObjectsOfType<TileLandController>();
+        foreach (var tileController in tiles)
+        {
+            if (QuantizeTilePosition(tileController.transform.position) == key)
+            {
+                _tileByPosition[key] = tileController;
+                Fleeted.patches.SyncTileDestroyPatch.SuppressNetSend = true;
+                tileController.DisableTile();
+                Fleeted.patches.SyncTileDestroyPatch.SuppressNetSend = false;
+                break;
+            }
+        }
+    }
+
+    private void BuildTileMap()
+    {
+        _tileByPosition.Clear();
+        var tiles = FindObjectsOfType<TileLandController>();
+        foreach (var tile in tiles)
+        {
+            _tileByPosition[QuantizeTilePosition(tile.transform.position)] = tile;
+        }
+    }
+
+    private static Vector2 QuantizeTilePosition(Vector2 position)
+    {
+        var x = Mathf.Round(position.x * 100f) / 100f;
+        var y = Mathf.Round(position.y * 100f) / 100f;
+        return new Vector2(x, y);
+    }
+
+    private void ApplyCameraState(CameraStatePacket cameraState)
+    {
+        if (isHost) return;
+
+        var cameraController = FindObjectOfType<CameraController>();
+        if (cameraController == null || cameraController.cam == null) return;
+
+        var currentPos = cameraController.camT.position;
+        var positionDiff = Vector3.Distance(currentPos, cameraState.Position);
+        var sizeDiff = Mathf.Abs(cameraController.cam.orthographicSize - cameraState.OrthographicSize);
+
+        if (positionDiff > CameraSnapDistanceThreshold)
+        {
+            cameraController.camT.position = cameraState.Position;
+            cameraController.cam.orthographicSize = cameraState.OrthographicSize;
+            _cameraPositionCorrection = Vector3.zero;
+            _cameraSizeCorrection = 0f;
+            _cameraCorrectionTimeRemaining = 0f;
+            return;
+        }
+
+        if (positionDiff > 0.25f || sizeDiff > 0.05f)
+        {
+            _cameraPositionCorrection = cameraState.Position - currentPos;
+            _cameraSizeCorrection = cameraState.OrthographicSize - cameraController.cam.orthographicSize;
+            _cameraCorrectionTimeRemaining = CameraCorrectionDurationSeconds;
+        }
+    }
+
+    private void ApplyCameraCorrections()
+    {
+        if (_cameraCorrectionTimeRemaining <= 0f) return;
+
+        var cameraController = FindObjectOfType<CameraController>();
+        if (cameraController == null || cameraController.cam == null) return;
+
+        var t = Mathf.Clamp01(Time.deltaTime / _cameraCorrectionTimeRemaining);
+
+        cameraController.camT.position += _cameraPositionCorrection * t;
+        _cameraPositionCorrection -= _cameraPositionCorrection * t;
+
+        cameraController.cam.orthographicSize += _cameraSizeCorrection * t;
+        _cameraSizeCorrection -= _cameraSizeCorrection * t;
+
+        _cameraCorrectionTimeRemaining -= Time.deltaTime;
+        if (_cameraCorrectionTimeRemaining <= 0f)
+        {
+            _cameraPositionCorrection = Vector3.zero;
+            _cameraSizeCorrection = 0f;
+        }
     }
 
 
@@ -504,8 +836,12 @@ public class InGameNetManager : MonoBehaviour
         rbBullets.Clear();
         bulletControllers.Clear();
         pingMap.Clear();
-        killVotes.Clear();
-        killVoters.Clear();
+        _localInputSequences.Clear();
+        _pendingLocalInputs.Clear();
+        _netInputsBySlot.Clear();
+        _lastProcessedInput.Clear();
+        _bulletNetIds.Clear();
+        _bulletByNetId.Clear();
         var ships = GameState.gameState.playerShips;
         for (var i = 0; i < 8; i++)
         {
@@ -515,33 +851,73 @@ public class InGameNetManager : MonoBehaviour
 
                 rbSlots.Add(i, ships[i].GetComponent<Rigidbody2D>());
 
-                if (IsSlotOwnedByThisClient(i))
+                var isOwned = IsSlotOwnedByThisClient(i);
+                if (isOwned)
+                {
                     ownedSlots.Add(i);
+                    _localInputSequences[i] = 0;
+                    _pendingLocalInputs[i] = new List<InputPacket>(64);
+                    _lastShootHeld[i] = false;
+                }
                 else
                 {
-                    controllersSlots.Add(i,
-                        ships[i].TryGetComponent<NetShipController>(out var controller)
-                            ? controller
-                            : ships[i].AddComponent<NetShipController>());
+                    _netInputsBySlot[i] = new NetInputState();
+                }
+
+                if (ships[i].TryGetComponent<NetShipController>(out var netController))
+                {
+                    netController.SetOwnership(isOwned);
+                }
+                else
+                {
+                    netController = ships[i].AddComponent<NetShipController>();
+                    netController.SetOwnership(isOwned);
+                }
+
+                controllersSlots.Add(i, netController);
+
+                if (!isHost && !isOwned)
+                {
+                    rbSlots[i].isKinematic = true;
                 }
 
                 var bullets = new Dictionary<int, BulletController>();
-                foreach (var bullet in ships[i].transform.GetChild(8))
+                var shipController = ships[i].GetComponent<ShipController>();
+                if (shipController != null && shipController.bulletsGO != null)
                 {
-                    if (((Transform) bullet).TryGetComponent<BulletController>(out var bulletController))
+                    for (var b = 0; b < shipController.bulletsGO.Length; b++)
                     {
-                        bullets.Add(bulletController.GetInstanceID(), bulletController);
+                        var bulletObj = shipController.bulletsGO[b];
+                        if (bulletObj != null && bulletObj.TryGetComponent<BulletController>(out var bulletController))
+                        {
+                            bulletController.bulletsContainer = shipController.bulletsContainer;
+                            var netId = (i << 8) | b;
+                            bullets.Add(netId, bulletController);
+                            _bulletNetIds[bulletController.GetInstanceID()] = netId;
+                            _bulletByNetId[netId] = bulletController;
+
+                            var rb = bulletController.GetComponent<Rigidbody2D>();
+                            rbBullets[netId] = rb;
+
+                            if (!isHost && !isOwned)
+                            {
+                                rb.isKinematic = true;
+                            }
+
+                            if (bulletController.gameObject.TryGetComponent<NetBulletController>(
+                                    out var netBulletController))
+                            {
+                                netBulletController.SetOwnership(isOwned, netId);
+                            }
+                            else
+                            {
+                                netBulletController = bulletController.gameObject.AddComponent<NetBulletController>();
+                                netBulletController.SetOwnership(isOwned, netId);
+                            }
+
+                            bulletControllers[netId] = netBulletController;
+                        }
                     }
-                }
-
-                foreach (var b in bullets)
-                {
-                    rbBullets.Add(b.Key, b.Value.GetComponent<Rigidbody2D>());
-
-                    bulletControllers.Add(b.Key,
-                        b.Value.gameObject.TryGetComponent<NetBulletController>(out var controller)
-                            ? controller
-                            : b.Value.gameObject.AddComponent<NetBulletController>());
                 }
 
                 bulletsSlots.Add(i, bullets);
@@ -557,7 +933,9 @@ public class InGameNetManager : MonoBehaviour
 
     public static bool IsSlotOwnedByThisClient(int slot)
     {
-        return LobbyManager.Instance.Players[slot].OwnerOfCharaId == SteamClient.SteamId;
+        if (slot < 0) return false;
+        return LobbyManager.Instance.Players.TryGetValue(slot, out var player) &&
+               player.OwnerOfCharaId == SteamClient.SteamId;
     }
 
 
@@ -646,7 +1024,7 @@ public class InGameNetManager : MonoBehaviour
 
         yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
 
-        StartClient();
+        StartClient(LobbyManager.Instance.isHost);
 
         for (var i = 0; i < 10; i++) // Warm up the connection ???
             SendPingPacket(false, flag: P2PSend.Unreliable);

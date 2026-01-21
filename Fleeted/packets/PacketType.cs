@@ -2,10 +2,11 @@ namespace Fleeted.packets;
 
 public enum PacketType
 {
-    ShipUpdate,
     Death,
-    Kill,
-    SpawnProjectile,
-    ProjectileUpdate,
     Ping,
+    InputUpdate,
+    WorldState,
+    BulletDestroy,
+    TileDestroy,
+    CameraState,
 }

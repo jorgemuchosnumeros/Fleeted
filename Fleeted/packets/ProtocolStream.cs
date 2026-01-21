@@ -75,22 +75,14 @@ public class ProtocolWriter : BinaryWriter
         Write(value.Response);
     }
 
-    public void Write(ShipPacket value)
+    public void Write(InputPacket value)
     {
-        Write(value.Position);
-        Write(value.Rotation);
         Write(value.Slot);
-        Write(value.StickRotation);
-        Write(value.Velocity);
-    }
-
-    public void Write(BulkShipUpdate value)
-    {
-        Write(value.Updates.Count);
-        foreach (var update in value.Updates)
-        {
-            Write(update);
-        }
+        Write(value.Sequence);
+        Write(value.Thrust);
+        Write(value.TurnLeft);
+        Write(value.TurnRight);
+        Write(value.Shoot);
     }
 
     public void Write(DeathPacket value)
@@ -100,35 +92,59 @@ public class ProtocolWriter : BinaryWriter
         Write(value.IsExplosionBig);
     }
 
-    public void Write(KillPacket value)
+    public void Write(ShipStatePacket value)
     {
-        Write(value.TargetShip);
-        Write(value.IsExplosionBig);
-    }
-
-    public void Write(SpawnProjectilePacket value)
-    {
-        Write(value.SourceShip);
-        Write(value.Id);
-        Write(value.Origin);
-        Write(value.IsEmpty);
-    }
-
-    public void Write(UpdateProjectilePacket value)
-    {
-        Write(value.SourceShip);
-        Write(value.Id);
+        Write(value.Slot);
+        Write(value.ServerTick);
         Write(value.Position);
         Write(value.Velocity);
+        Write(value.Rotation);
+        Write(value.StickRotation);
+        Write(value.AngularVelocity);
+        Write(value.LastProcessedInput);
+        Write(value.Ammo);
     }
 
-    public void Write(BulkProjectileUpdate value)
+    public void Write(BulletStatePacket value)
     {
-        Write(value.Updates.Count);
-        foreach (var update in value.Updates)
+        Write(value.NetId);
+        Write(value.ServerTick);
+        Write(value.Position);
+        Write(value.Velocity);
+        Write(value.Active);
+    }
+
+    public void Write(WorldStatePacket value)
+    {
+        Write(value.ServerTick);
+        Write(value.Ships.Count);
+        foreach (var ship in value.Ships)
         {
-            Write(update);
+            Write(ship);
         }
+
+        Write(value.Bullets.Count);
+        foreach (var bullet in value.Bullets)
+        {
+            Write(bullet);
+        }
+    }
+
+    public void Write(BulletDestroyPacket value)
+    {
+        Write(value.NetId);
+    }
+
+    public void Write(TileDestroyPacket value)
+    {
+        Write(value.Position);
+    }
+
+    public void Write(CameraStatePacket value)
+    {
+        Write(value.ServerTick);
+        Write(value.Position);
+        Write(value.OrthographicSize);
     }
 }
 
@@ -215,30 +231,16 @@ public class ProtocolReader : BinaryReader
         };
     }
 
-    public ShipPacket ReadShipPacket()
+    public InputPacket ReadInputPacket()
     {
-        return new ShipPacket
+        return new InputPacket
         {
-            Position = ReadVector2(),
-            Rotation = ReadSingle(),
             Slot = ReadInt32(),
-            StickRotation = ReadSingle(),
-            Velocity = ReadVector2(),
-        };
-    }
-
-    public BulkShipUpdate ReadBulkShipUpdate()
-    {
-        var count = ReadInt32();
-        var updates = new List<ShipPacket>(count);
-        for (int i = 0; i < count; i++)
-        {
-            updates.Add(ReadShipPacket());
-        }
-
-        return new BulkShipUpdate
-        {
-            Updates = updates,
+            Sequence = ReadInt32(),
+            Thrust = ReadBoolean(),
+            TurnLeft = ReadBoolean(),
+            TurnRight = ReadBoolean(),
+            Shoot = ReadBoolean(),
         };
     }
 
@@ -252,49 +254,82 @@ public class ProtocolReader : BinaryReader
         };
     }
 
-    public KillPacket ReadKillPacket()
+    public ShipStatePacket ReadShipStatePacket()
     {
-        return new KillPacket
+        return new ShipStatePacket
         {
-            TargetShip = ReadInt32(),
-            IsExplosionBig = ReadBoolean(),
-        };
-    }
-
-    public SpawnProjectilePacket ReadSpawnProjectilePacket()
-    {
-        return new SpawnProjectilePacket
-        {
-            SourceShip = ReadInt32(),
-            Id = ReadInt32(),
-            Origin = ReadVector2(),
-            IsEmpty = ReadBoolean(),
-        };
-    }
-
-    public UpdateProjectilePacket ReadUpdateProjectilePacket()
-    {
-        return new UpdateProjectilePacket
-        {
-            SourceShip = ReadInt32(),
-            Id = ReadInt32(),
+            Slot = ReadInt32(),
+            ServerTick = ReadInt32(),
             Position = ReadVector2(),
             Velocity = ReadVector2(),
+            Rotation = ReadSingle(),
+            StickRotation = ReadSingle(),
+            AngularVelocity = ReadSingle(),
+            LastProcessedInput = ReadInt32(),
+            Ammo = ReadInt32(),
         };
     }
 
-    public BulkProjectileUpdate ReadBulkProjectileUpdate()
+    public BulletStatePacket ReadBulletStatePacket()
     {
-        var count = ReadInt32();
-        var updates = new List<UpdateProjectilePacket>(count);
-        for (int i = 0; i < count; i++)
+        return new BulletStatePacket
         {
-            updates.Add(ReadUpdateProjectilePacket());
+            NetId = ReadInt32(),
+            ServerTick = ReadInt32(),
+            Position = ReadVector2(),
+            Velocity = ReadVector2(),
+            Active = ReadBoolean(),
+        };
+    }
+
+    public WorldStatePacket ReadWorldStatePacket()
+    {
+        var serverTick = ReadInt32();
+        var shipCount = ReadInt32();
+        var ships = new List<ShipStatePacket>(shipCount);
+        for (var i = 0; i < shipCount; i++)
+        {
+            ships.Add(ReadShipStatePacket());
         }
 
-        return new BulkProjectileUpdate
+        var bulletCount = ReadInt32();
+        var bullets = new List<BulletStatePacket>(bulletCount);
+        for (var i = 0; i < bulletCount; i++)
         {
-            Updates = updates,
+            bullets.Add(ReadBulletStatePacket());
+        }
+
+        return new WorldStatePacket
+        {
+            ServerTick = serverTick,
+            Ships = ships,
+            Bullets = bullets,
+        };
+    }
+
+    public BulletDestroyPacket ReadBulletDestroyPacket()
+    {
+        return new BulletDestroyPacket
+        {
+            NetId = ReadInt32(),
+        };
+    }
+
+    public TileDestroyPacket ReadTileDestroyPacket()
+    {
+        return new TileDestroyPacket
+        {
+            Position = ReadVector2(),
+        };
+    }
+
+    public CameraStatePacket ReadCameraStatePacket()
+    {
+        return new CameraStatePacket
+        {
+            ServerTick = ReadInt32(),
+            Position = ReadVector3(),
+            OrthographicSize = ReadSingle(),
         };
     }
 }

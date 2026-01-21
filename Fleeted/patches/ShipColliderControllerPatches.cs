@@ -15,6 +15,7 @@ public static class GetLastCollisionTypePatch
     static void Prefix(ShipColliderController __instance, Collision2D collision)
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return;
+        if (!InGameNetManager.Instance.GracePeriod.TrueDone()) return;
 
         Random.InitState(LobbyManager.Instance.seed);
 
@@ -43,39 +44,20 @@ public static class SendExplode
     static bool Prefix(ShipColliderController __instance)
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+        if (!InGameNetManager.Instance.GracePeriod.TrueDone()) return false;
 
-        if (InGameNetManager.IsSlotOwnedByThisClient(__instance.shipController.playerN - 1) || PermissionToDie)
+        if (InGameNetManager.Instance.isHost || PermissionToDie)
         {
             PermissionToDie = false;
             return true;
         }
-
-        var killPacket = new KillPacket
-        {
-            TargetShip = __instance.shipController.playerN - 1,
-            IsExplosionBig = false,
-        };
-
-        using var memoryStream = new MemoryStream();
-        using (var writer = new ProtocolWriter(memoryStream))
-        {
-            writer.Write(killPacket);
-        }
-
-        var data = memoryStream.ToArray();
-
-        var shipOwner = LobbyManager.Instance.Players[__instance.shipController.playerN - 1].OwnerOfCharaId;
-        InGameNetManager.Instance.SendPacketToSomeone(SteamClient.SteamId, shipOwner, data, PacketType.Kill,
-            P2PSend.Reliable);
-        Plugin.Logger.LogInfo(
-            $"Saw {__instance.shipController.playerN - 1} from: {shipOwner} die, Polling to kill them");
 
         return false;
     }
 
     static void Postfix(ShipColliderController __instance)
     {
-        if (!InGameNetManager.IsSlotOwnedByThisClient(__instance.shipController.playerN - 1)) return;
+        if (!InGameNetManager.Instance.isHost) return;
 
         var sourceShip = GetLastCollisionTypePatch.IsLastCollisionABullet
             ? GetLastCollisionTypePatch.LastCollision.gameObject.GetComponent<BulletController>().player - 1
@@ -109,40 +91,19 @@ public static class SendExplodeBig
     static bool Prefix(ShipColliderController __instance)
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
+        if (!InGameNetManager.Instance.GracePeriod.TrueDone()) return false;
 
-        if (InGameNetManager.IsSlotOwnedByThisClient(__instance.shipController.playerN - 1) ||
-            SendExplode.PermissionToDie)
+        if (InGameNetManager.Instance.isHost || SendExplode.PermissionToDie)
         {
             SendExplode.PermissionToDie = false;
             return true;
         }
-
-        var killPacket = new KillPacket
-        {
-            TargetShip = __instance.shipController.playerN - 1,
-            IsExplosionBig = true,
-        };
-
-        using var memoryStream = new MemoryStream();
-        using (var writer = new ProtocolWriter(memoryStream))
-        {
-            writer.Write(killPacket);
-        }
-
-        var data = memoryStream.ToArray();
-
-        var shipOwner = LobbyManager.Instance.Players[__instance.shipController.playerN - 1].OwnerOfCharaId;
-        InGameNetManager.Instance.SendPacketToSomeone(SteamClient.SteamId, shipOwner, data, PacketType.Kill,
-            P2PSend.Reliable);
-        Plugin.Logger.LogInfo(
-            $"Saw {__instance.shipController.playerN - 1} from: {shipOwner} die, Polling to kill them");
-
         return false;
     }
 
     static void Postfix(ShipColliderController __instance)
     {
-        if (!InGameNetManager.IsSlotOwnedByThisClient(__instance.shipController.playerN - 1)) return;
+        if (!InGameNetManager.Instance.isHost) return;
         Plugin.Logger.LogInfo($"Sending big explosion from {__instance.shipController.playerN - 1}");
 
         var deathPacket = new DeathPacket

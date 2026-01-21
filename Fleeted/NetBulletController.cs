@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using Fleeted.packets;
 using Fleeted.utils;
@@ -7,12 +8,14 @@ namespace Fleeted;
 
 public class NetBulletController : MonoBehaviour
 {
-    private readonly TimedAction _stillBulletLifeTime = new(0.5f);
     private BulletController _bcontroller;
-    private UpdateProjectilePacket _latestSPacket;
-    private bool _letBulletLoose;
     private Rigidbody2D _rb;
-    private Vector2 _savedBulletLifeTimePos = Vector2.positiveInfinity;
+    private readonly List<BulletStatePacket> _stateBuffer = new();
+    private BulletStatePacket _latestState;
+    private bool _isOwned;
+    private int _netId;
+    private const int InterpolationDelayTicks = 6;
+    private const float ReconcileDistanceThreshold = 0.5f;
 
     private void Awake()
     {
@@ -22,7 +25,6 @@ public class NetBulletController : MonoBehaviour
 
     private void Start()
     {
-        _stillBulletLifeTime.Start();
     }
 
     private void Update()
@@ -30,65 +32,152 @@ public class NetBulletController : MonoBehaviour
         if (GlobalController.globalController.screen != GlobalController.screens.game)
             Explode();
 
-        if (_latestSPacket == null) return;
+        if (_latestState == null) return;
 
-        if (_stillBulletLifeTime.TrueDone())
+        if (_isOwned)
         {
-            var position = (Vector2) transform.position;
-            var diff = (position - _savedBulletLifeTimePos).magnitude;
-
-            if (diff > 0.2f)
-                _letBulletLoose = true;
-
-            _savedBulletLifeTimePos = position;
-            _stillBulletLifeTime.Start();
+            return;
         }
 
-        var posDiscrepancy = (new Vector2(transform.position.x, transform.position.y) - _latestSPacket.Position)
-            .sqrMagnitude;
+        var renderTick = InGameNetManager.Instance.GetEstimatedServerTick() - InterpolationDelayTicks;
+        var state = GetInterpolatedState(renderTick);
 
-        var predictedPosition = _latestSPacket.Position;
-
-        if (LobbyManager.Instance.Players.TryGetValue(_bcontroller.player - 1, out var player))
+        if (!gameObject.activeSelf && state.Active)
         {
-            if (InGameNetManager.Instance.pingMap.TryGetValue(player.OwnerOfCharaId, out var ping))
-            {
-                predictedPosition =
-                    NetShipController.PredictObjectPosition(_latestSPacket.Position, _latestSPacket.Velocity,
-                        ping / 1000f);
-            }
+            gameObject.SetActive(true);
         }
 
-
-        _rb.velocity = _latestSPacket.Velocity;
-
-        if (posDiscrepancy > 2f && !_letBulletLoose)
-        {
-            transform.position = Vector2.Lerp(transform.position, predictedPosition, 6f * Time.deltaTime);
-        }
+        _rb.velocity = state.Velocity;
+        transform.position = state.Position;
     }
 
     private void OnDisable()
     {
-        _latestSPacket = null;
+        _latestState = null;
     }
 
-    public void ReceiveUpdates(UpdateProjectilePacket packet)
+    public void SetOwnership(bool isOwned, int netId)
     {
-        _latestSPacket = packet;
+        _isOwned = isOwned;
+        _netId = netId;
+    }
+
+    public void ReceiveState(BulletStatePacket packet)
+    {
+        if (_isOwned)
+        {
+            if (!packet.Active && gameObject.activeSelf)
+            {
+                ExplodeAt(packet.Position);
+            }
+            else if (!packet.Active && _bcontroller != null && !_bcontroller.exploded)
+            {
+                ExplodeAt(packet.Position);
+            }
+            return;
+        }
+
+        _latestState = packet;
+
+        if (packet.Active && !gameObject.activeSelf)
+        {
+            gameObject.SetActive(true);
+        }
+        else if (!packet.Active && gameObject.activeSelf)
+        {
+            gameObject.SetActive(false);
+        }
+
+        _stateBuffer.Add(packet);
+        TrimBuffer(packet.ServerTick);
+
+        if (_isOwned)
+        {
+            Reconcile(packet);
+        }
+    }
+
+    private void TrimBuffer(int latestTick)
+    {
+        var maxTicks = InGameNetManager.Instance.MaxBufferTicks;
+        _stateBuffer.RemoveAll(state => latestTick - state.ServerTick > maxTicks);
+    }
+
+    private BulletStatePacket GetInterpolatedState(int renderTick)
+    {
+        if (_stateBuffer.Count == 0) return _latestState;
+        if (_stateBuffer.Count == 1) return _stateBuffer[0];
+
+        BulletStatePacket from = _stateBuffer[0];
+        BulletStatePacket to = _stateBuffer[_stateBuffer.Count - 1];
+
+        for (var i = 0; i < _stateBuffer.Count - 1; i++)
+        {
+            var a = _stateBuffer[i];
+            var b = _stateBuffer[i + 1];
+            if (a.ServerTick <= renderTick && renderTick <= b.ServerTick)
+            {
+                from = a;
+                to = b;
+                break;
+            }
+        }
+
+        if (from.ServerTick == to.ServerTick) return to;
+
+        var t = Mathf.Clamp01((renderTick - from.ServerTick) / (float) (to.ServerTick - from.ServerTick));
+
+        return new BulletStatePacket
+        {
+            NetId = _netId,
+            ServerTick = renderTick,
+            Position = Vector2.Lerp(from.Position, to.Position, t),
+            Velocity = Vector2.Lerp(from.Velocity, to.Velocity, t),
+            Active = to.Active,
+        };
+    }
+
+    private void Reconcile(BulletStatePacket packet)
+    {
+        if (Vector2.Distance(transform.position, packet.Position) > ReconcileDistanceThreshold)
+        {
+            transform.position = packet.Position;
+            _rb.velocity = packet.Velocity;
+        }
     }
 
     public void Explode()
     {
-        _bcontroller.exploded = true;
-        var obj = typeof(BulletController).GetField("obj", BindingFlags.Instance | BindingFlags.NonPublic);
         var tr = typeof(BulletController).GetField("tr", BindingFlags.Instance | BindingFlags.NonPublic);
+        var position = transform.position;
+        if (tr != null && _bcontroller != null)
+        {
+            var trValue = tr.GetValue(_bcontroller) as Transform;
+            if (trValue != null)
+            {
+                position = trValue.position;
+            }
+        }
+
+        ExplodeAt(position);
+    }
+
+    private void ExplodeAt(Vector2 position)
+    {
+        if (_bcontroller == null) return;
+        if (_bcontroller.bulletsContainer == null)
+            return;
+        if (_bcontroller.exploded)
+            return;
+        _bcontroller.exploded = true;
+
+        var obj = typeof(BulletController).GetField("obj", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (obj == null) return;
         obj.SetValue(_bcontroller, ExplosionsController.explosionsController.GetExplosion());
         if (obj.GetValue(_bcontroller) != null)
         {
             ((GameObject) obj.GetValue(_bcontroller)).transform.localScale = new Vector2(0.5f, 0.5f);
-            ((GameObject) obj.GetValue(_bcontroller)).transform.position =
-                ((Transform) tr.GetValue(_bcontroller)).position;
+            ((GameObject) obj.GetValue(_bcontroller)).transform.position = position;
         }
 
         ExplosionsController.explosionsController.PlayBulletExplosion();
