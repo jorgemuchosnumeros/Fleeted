@@ -25,7 +25,7 @@ public class NetShipController : MonoBehaviour
     private const float CorrectionDurationSeconds = 0.12f;
     private const float OwnedReconcileDistanceThreshold = 0.35f;
     private const float OwnedDriftDistanceThreshold = 0.08f;
-    private const float OwnedCorrectionDurationSeconds = 0.18f;
+    private const float OwnedCorrectionDurationSeconds = 0.09f;
     private const float OwnedDriftCorrectionDurationSeconds = 0.4f;
     private const float OwnedMaxPositionCorrectionPerSecond = 5f;
     private const float OwnedMaxVelocityCorrectionPerSecond = 8f;
@@ -33,6 +33,8 @@ public class NetShipController : MonoBehaviour
     private const float OwnedReconcileRotationThreshold = 8f;
     private const float OwnedDriftRotationThreshold = 2f;
     private const int MaxPredictionSteps = 32;
+    private const float RemotePositionLerpSpeed = 14f;
+    private const float RemoteRotationLerpSpeed = 16f;
     private Vector2 _positionCorrection;
     private Vector2 _velocityCorrection;
     private float _rotationCorrection;
@@ -71,13 +73,21 @@ public class NetShipController : MonoBehaviour
         var renderTick = InGameNetManager.Instance.GetEstimatedServerTick() - InterpolationDelayTicks;
         var state = GetInterpolatedState(renderTick);
 
-        _rb.velocity = state.Velocity;
-        _rb.angularVelocity = state.AngularVelocity;
-        transform.position = state.Position;
+        var posT = 1f - Mathf.Exp(-RemotePositionLerpSpeed * Time.deltaTime);
+        var rotT = 1f - Mathf.Exp(-RemoteRotationLerpSpeed * Time.deltaTime);
+
+        _rb.velocity = Vector2.Lerp(_rb.velocity, state.Velocity, posT);
+        _rb.angularVelocity = Mathf.Lerp(_rb.angularVelocity, state.AngularVelocity, rotT);
+        transform.position = Vector2.Lerp(transform.position, state.Position, posT);
 
         var stick = transform.GetChild(2).GetChild(2);
-        stick.localRotation = Quaternion.Euler(new Vector3(0, 0, state.StickRotation));
-        transform.rotation = Quaternion.Euler(new Vector3(0, 0, state.Rotation));
+        var stickZ = stick.localRotation.eulerAngles.z;
+        var stickLerp = Mathf.LerpAngle(stickZ, state.StickRotation, rotT);
+        stick.localRotation = Quaternion.Euler(new Vector3(0, 0, stickLerp));
+
+        var shipZ = transform.rotation.eulerAngles.z;
+        var shipLerp = Mathf.LerpAngle(shipZ, state.Rotation, rotT);
+        transform.rotation = Quaternion.Euler(new Vector3(0, 0, shipLerp));
     }
 
     public static void ExplodeNetShip(bool big, ShipController controller, ShipColliderController colliderController)
@@ -462,6 +472,17 @@ public class NetShipController : MonoBehaviour
             _rotationCorrection = 0f;
             _applyVelocityCorrection = false;
         }
+    }
+
+    public void ResetNetState()
+    {
+        _stateBuffer.Clear();
+        _latestState = null;
+        _positionCorrection = Vector2.zero;
+        _velocityCorrection = Vector2.zero;
+        _rotationCorrection = 0f;
+        _correctionTimeRemaining = 0f;
+        _applyVelocityCorrection = false;
     }
 
     public void Explode(DeathPacket packet)

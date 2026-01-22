@@ -130,7 +130,7 @@ public static class ManageCameraEvenInPause1
         if (!(bool) notFirstLeader.GetValue(instance))
         {
             //notFirstLeader = true;
-            notFirstLeader.SetValue(instance, false);
+            notFirstLeader.SetValue(instance, true);
             instance.centeringOnLeader = false;
         }
         else

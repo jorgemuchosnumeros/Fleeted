@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Fleeted.packets;
 using Fleeted.patches;
 using Fleeted.utils;
@@ -21,13 +22,14 @@ namespace Fleeted;
 
 public class InGameNetManager : MonoBehaviour
 {
-    public static float PacketDelaySeconds = 0.15f;
-    public static float PacketDelayJitterSeconds = 0.025f;
+    public static float PacketDelaySeconds = 0.08f;
+    public static float PacketDelayJitterSeconds = 0.015f;
     private const float NetTickRate = 50f;
     private const float MaxStateBufferSeconds = 0.5f;
     private const float CameraSyncRate = 5f;
     public static InGameNetManager Instance;
     public static float NetTickDeltaSeconds => 1.0f / NetTickRate;
+    public static bool UseBulletSpawnSync = true;
 
     public bool isHost;
     public bool isClient;
@@ -60,6 +62,9 @@ public class InGameNetManager : MonoBehaviour
     private long _startTime;
 
     private int _serverTick;
+    private int _minAcceptedServerTick;
+    private int _roundId;
+    private int _minAcceptedRoundId;
     private int _latestServerTick;
     private float _latestServerTickTime;
 
@@ -70,6 +75,8 @@ public class InGameNetManager : MonoBehaviour
     private readonly Dictionary<int, int> _bulletNetIds = new();
     private readonly Dictionary<int, BulletController> _bulletByNetId = new();
     private readonly Dictionary<Vector2, TileLandController> _tileByPosition = new();
+    private readonly HashSet<int> _authorizedBulletSpawns = new();
+    private int _lastLeaderPlayerSynced;
     private int _inputsSent;
     private int _inputsReceived;
     private int _worldStatesSent;
@@ -236,6 +243,9 @@ public class InGameNetManager : MonoBehaviour
         PingSendTick.Start();
         _pingStopwatch.Start();
         _serverTick = 0;
+        _minAcceptedServerTick = 0;
+        _roundId = 0;
+        _minAcceptedRoundId = 0;
         _latestServerTick = 0;
         _latestServerTickTime = 0f;
         _inputsSent = 0;
@@ -257,6 +267,12 @@ public class InGameNetManager : MonoBehaviour
 
     public void StartClient(bool asHost = false)
     {
+        if (LobbyManager.Instance != null &&
+            !EqualityComparer<Lobby>.Default.Equals(LobbyManager.Instance.CurrentLobby, default))
+        {
+            asHost = LobbyManager.Instance.CurrentLobby.Owner.Id == SteamClient.SteamId;
+        }
+
         Plugin.Logger.LogInfo($"Starting client {(asHost ? "and server" : string.Empty)}");
 
         isHost = asHost;
@@ -268,7 +284,7 @@ public class InGameNetManager : MonoBehaviour
         Plugin.Logger.LogInfo($"Stopping client {(asHost ? "and server" : string.Empty)}");
 
         isHost = asHost;
-        isClient = true;
+        isClient = false;
     }
 
     private void SendInputUpdates()
@@ -329,7 +345,9 @@ public class InGameNetManager : MonoBehaviour
 
         var worldState = new WorldStatePacket
         {
+            RoundId = _roundId,
             ServerTick = _serverTick,
+            LeaderPlayer = GameState.gameState != null ? GameState.gameState.leaderPlayer : 0,
             Ships = new List<ShipStatePacket>(),
             Bullets = new List<BulletStatePacket>(),
         };
@@ -355,26 +373,29 @@ public class InGameNetManager : MonoBehaviour
             });
         }
 
-        foreach (var slotBullets in bulletsSlots.Values)
+        if (!UseBulletSpawnSync)
         {
-            foreach (var bulletEntry in slotBullets)
+            foreach (var slotBullets in bulletsSlots.Values)
             {
-                var netId = bulletEntry.Key;
-                var bullet = bulletEntry.Value;
-                if (bullet == null) continue;
-
-                if (!rbBullets.TryGetValue(netId, out var rb)) continue;
-
-                if (!bullet.gameObject.activeSelf) continue;
-
-                worldState.Bullets.Add(new BulletStatePacket
+                foreach (var bulletEntry in slotBullets)
                 {
-                    NetId = netId,
-                    ServerTick = _serverTick,
-                    Position = bullet.transform.position,
-                    Velocity = rb.velocity,
-                    Active = true,
-                });
+                    var netId = bulletEntry.Key;
+                    var bullet = bulletEntry.Value;
+                    if (bullet == null) continue;
+
+                    if (!rbBullets.TryGetValue(netId, out var rb)) continue;
+
+                    if (!bullet.gameObject.activeSelf) continue;
+
+                    worldState.Bullets.Add(new BulletStatePacket
+                    {
+                        NetId = netId,
+                        ServerTick = _serverTick,
+                        Position = bullet.transform.position,
+                        Velocity = rb.velocity,
+                        Active = true,
+                    });
+                }
             }
         }
 
@@ -524,9 +545,21 @@ public class InGameNetManager : MonoBehaviour
                 case PacketType.WorldState:
                     var worldState = dataStream.ReadWorldStatePacket();
                     _worldStatesReceived++;
+                    if (worldState.RoundId < _minAcceptedRoundId)
+                        break;
+                    if (worldState.ServerTick < _minAcceptedServerTick)
+                        break;
                     RecordServerTick(worldState.ServerTick);
                     _lastWorldStateShips = worldState.Ships.Count;
                     _lastWorldStateBullets = worldState.Bullets.Count;
+
+                    if (worldState.LeaderPlayer > 0
+                        && GlobalController.globalController.mode == GlobalController.modes.leader
+                        && GameState.gameState != null
+                        && GameState.gameState.leaderPlayer != worldState.LeaderPlayer)
+                    {
+                        ApplyLeaderState(worldState.LeaderPlayer);
+                    }
 
                     foreach (var shipState in worldState.Ships)
                     {
@@ -536,20 +569,30 @@ public class InGameNetManager : MonoBehaviour
                         }
                     }
 
-                    foreach (var bulletState in worldState.Bullets)
+                    if (!UseBulletSpawnSync)
                     {
-                        if (bulletControllers.TryGetValue(bulletState.NetId, out var bulletController))
+                        foreach (var bulletState in worldState.Bullets)
                         {
-                            bulletController.ReceiveState(bulletState);
+                            if (bulletControllers.TryGetValue(bulletState.NetId, out var bulletController))
+                            {
+                                bulletController.ReceiveState(bulletState);
+                            }
                         }
                     }
 
+                    break;
+                case PacketType.BulletSpawn:
+                    var bulletSpawnPacket = dataStream.ReadBulletSpawnPacket();
+                    if (_bulletByNetId.TryGetValue(bulletSpawnPacket.NetId, out var bulletControllerSpawn))
+                    {
+                        ApplyBulletSpawn(bulletControllerSpawn, bulletSpawnPacket);
+                    }
                     break;
                 case PacketType.BulletDestroy:
                     var bulletDestroyPacket = dataStream.ReadBulletDestroyPacket();
                     if (bulletControllers.TryGetValue(bulletDestroyPacket.NetId, out var netBulletController))
                     {
-                        netBulletController.Explode();
+                        netBulletController.ExplodeAt(bulletDestroyPacket.Position);
                     }
                     break;
                 case PacketType.TileDestroy:
@@ -560,6 +603,10 @@ public class InGameNetManager : MonoBehaviour
                     var cameraStatePacket = dataStream.ReadCameraStatePacket();
                     RecordServerTick(cameraStatePacket.ServerTick);
                     ApplyCameraState(cameraStatePacket);
+                    break;
+                case PacketType.LeaderChange:
+                    var leaderChangePacket = dataStream.ReadLeaderChangePacket();
+                    ApplyLeaderChange(leaderChangePacket);
                     break;
                 }
             }
@@ -835,6 +882,141 @@ public class InGameNetManager : MonoBehaviour
         }
     }
 
+    private static void ApplyBulletSpawn(BulletController controller, BulletSpawnPacket packet)
+    {
+        if (controller == null) return;
+        if (Instance != null)
+            Instance.AuthorizeBulletSpawn(packet.NetId);
+
+        if (!controller.gameObject.activeSelf)
+        {
+            controller.gameObject.SetActive(true);
+        }
+        else
+        {
+            Instance?.ConsumeAuthorizedBulletSpawn(packet.NetId);
+        }
+
+        controller.exploded = false;
+        controller.inWindArea = false;
+        controller.player = packet.Player;
+        controller.parryPlayer = packet.ParryPlayer;
+
+        var tr = controller.transform;
+        tr.parent = null;
+        var position = packet.Position;
+        var velocity = packet.Velocity;
+
+        var slot = packet.Player - 1;
+        var leadSeconds = Instance != null ? Instance.GetLeadSecondsForSlot(slot) : 0f;
+        if (leadSeconds > 0f)
+            position += velocity * leadSeconds;
+
+        tr.position = position;
+        tr.rotation = Quaternion.Euler(0f, 0f, packet.Rotation);
+
+        var rb = controller.GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.simulated = true;
+            rb.velocity = velocity;
+            rb.WakeUp();
+        }
+
+        var trail = controller.GetComponent<TrailRenderer>();
+        if (trail != null)
+            trail.Clear();
+    }
+
+    private static void ApplyLeaderChange(LeaderChangePacket packet)
+    {
+        if (GameState.gameState == null) return;
+        if (GlobalController.globalController.mode != GlobalController.modes.leader) return;
+
+        Plugin.Logger.LogInfo(
+            $"LeaderChange recv: old={packet.OldLeader}, new={packet.NewLeader}, localLeader={GameState.gameState.leaderPlayer}");
+
+        if (Instance != null)
+            Instance.ApplyLeaderState(packet.NewLeader);
+    }
+
+    private void ApplyLeaderState(int newLeader)
+    {
+        if (GameState.gameState == null) return;
+        if (newLeader <= 0) return;
+
+        var leaderChanged = _lastLeaderPlayerSynced != newLeader;
+        GameState.gameState.leaderPlayer = newLeader;
+        _lastLeaderPlayerSynced = newLeader;
+
+        var cameraController = GameState.gameState.cameraController ?? FindObjectOfType<CameraController>();
+        if (cameraController != null)
+            cameraController.GetLeader();
+
+        if (LeaderChangeController.leaderChangeController != null)
+            LeaderChangeController.leaderChangeController.changing = true;
+
+        if (!leaderChanged) return;
+
+        var slot = newLeader - 1;
+        if (slot >= 0 && GameState.gameState.playerShips != null && slot < GameState.gameState.playerShips.Length)
+        {
+            var ship = GameState.gameState.playerShips[slot];
+            if (ship != null)
+            {
+                var shipController = ship.GetComponent<ShipController>();
+                if (shipController != null)
+                    shipController.HullOutline();
+            }
+        }
+    }
+
+    public void AuthorizeBulletSpawn(int netId)
+    {
+        _authorizedBulletSpawns.Add(netId);
+    }
+
+    public bool ConsumeAuthorizedBulletSpawn(int netId)
+    {
+        return _authorizedBulletSpawns.Remove(netId);
+    }
+
+    public float GetLeadSecondsForSlot(int slot)
+    {
+        if (slot < 0) return 0f;
+        if (LobbyManager.Instance == null || !LobbyManager.Instance.Players.TryGetValue(slot, out var player))
+            return 0f;
+
+        if (!pingMap.TryGetValue((SteamId) player.OwnerOfCharaId, out var pingMs))
+            return 0f;
+
+        return Mathf.Clamp(pingMs * 0.0005f, 0f, 0.2f);
+    }
+
+
+
+    private void ResetRemoteStateBuffers()
+    {
+        foreach (var controller in controllersSlots.Values)
+        {
+            controller.ResetNetState();
+        }
+
+        foreach (var bullet in bulletControllers.Values)
+        {
+            bullet.ResetNetState();
+        }
+    }
+
+    private void LogReadyState(Lobby lobby)
+    {
+        if (EqualityComparer<Lobby>.Default.Equals(lobby, default)) return;
+        var status = string.Join(", ",
+            lobby.Members.Select(member => $"{member.Id}:{lobby.GetMemberData(member, "Ready")}"));
+        Plugin.Logger.LogInfo($"StartNewNetRound: Ready state [{status}]");
+    }
+
 
     public void UpdateShipReferences()
     {
@@ -910,7 +1092,7 @@ public class InGameNetManager : MonoBehaviour
 
                             if (!isHost && !isOwned)
                             {
-                                rb.isKinematic = true;
+                                rb.isKinematic = !UseBulletSpawnSync;
                             }
 
                             if (bulletController.gameObject.TryGetComponent<NetBulletController>(
@@ -1009,29 +1191,83 @@ public class InGameNetManager : MonoBehaviour
         // Wait for everyone to be ready and host decides a date to start the Game,
         // ensuring everyone starts at the same time
         StartNewRoundWhenEveryoneReadyPatch.StartingInProgress = true;
+        Plugin.Logger.LogInfo("StartNewNetRound: begin");
 
         CameraMovementSeed = LobbyManager.Instance.seed;
 
         var lobby = LobbyManager.Instance.CurrentLobby;
         lobby.SetMemberData("Ready", "yes");
         lobby.SetData("StartTime", string.Empty);
+        Plugin.Logger.LogInfo($"StartNewNetRound: ready set; isHost={LobbyManager.Instance.isHost}");
 
-        var serverClientTimeDiff = NTP.GetNetworkTime().Ticks - DateTime.UtcNow.Ticks;
+        long serverClientTimeDiff = 0;
+        try
+        {
+            var ntpTask = Task.Run(() => NTP.GetNetworkTime().Ticks - DateTime.UtcNow.Ticks);
+            if (ntpTask.Wait(2000))
+            {
+                serverClientTimeDiff = ntpTask.Result;
+            }
+            else
+            {
+                Plugin.Logger.LogWarning("StartNewNetRound: NTP timeout, using local clock.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"StartNewNetRound: NTP failed, using local clock. {ex.Message}");
+        }
         _serverClientTimeDiff = serverClientTimeDiff;
 
+        var hostReadyStart = Time.time;
+        var hostReadyLog = hostReadyStart;
         while (LobbyManager.Instance.isHost)
         {
-            Thread.Sleep(500);
+            yield return new WaitForSeconds(0.5f);
 
             if (IsEveryoneReady(lobby))
             {
+                Plugin.Logger.LogInfo("StartNewNetRound: everyone ready, setting StartTime.");
                 lobby.SetData("StartTime",
                     $"{DateTime.UtcNow.Ticks + serverClientTimeDiff + 50000000L}"); // Give 5 seconds of headstart for the rest to be ready
                 break;
             }
+
+            if (Time.time - hostReadyLog > 2f)
+            {
+                hostReadyLog = Time.time;
+                Plugin.Logger.LogInfo("StartNewNetRound: waiting for Ready=yes from all members.");
+                LogReadyState(lobby);
+            }
+
+            if (Time.time - hostReadyStart > 15f)
+            {
+                Plugin.Logger.LogWarning("StartNewNetRound: Ready timeout, forcing StartTime.");
+                lobby.SetData("StartTime",
+                    $"{DateTime.UtcNow.Ticks + serverClientTimeDiff + 50000000L}");
+                break;
+            }
         }
 
-        yield return new WaitUntil(() => lobby.GetData("StartTime") != string.Empty);
+        var startTimeWait = Time.time;
+        var startTimeLog = startTimeWait;
+        while (lobby.GetData("StartTime") == string.Empty)
+        {
+            if (Time.time - startTimeLog > 2f)
+            {
+                startTimeLog = Time.time;
+                Plugin.Logger.LogInfo("StartNewNetRound: waiting for StartTime.");
+            }
+            if (Time.time - startTimeWait > 15f)
+            {
+                Plugin.Logger.LogWarning("StartNewNetRound: StartTime missing, forcing local start.");
+                lobby.SetData("StartTime",
+                    $"{DateTime.UtcNow.Ticks + serverClientTimeDiff + 50000000L}");
+                break;
+            }
+            yield return null;
+        }
+        Plugin.Logger.LogInfo($"StartNewNetRound: StartTime={lobby.GetData("StartTime")}");
 
         StartClient(LobbyManager.Instance.isHost);
 
@@ -1047,7 +1283,16 @@ public class InGameNetManager : MonoBehaviour
         ShowConnectingMessage(true);
 
         _logClientDiff = true;
-        yield return new WaitUntil(() => DateTime.UtcNow.Ticks + serverClientTimeDiff >= startTime); // FIXME: Buggy AF
+        var startWait = Time.time;
+        while (DateTime.UtcNow.Ticks + serverClientTimeDiff < startTime)
+        {
+            if (Time.time - startWait > 15f)
+            {
+                Plugin.Logger.LogWarning("StartNewNetRound: StartTime wait timeout, proceeding anyway.");
+                break;
+            }
+            yield return null;
+        }
         _logClientDiff = false;
 
         ShowConnectingMessage(false);
@@ -1063,6 +1308,13 @@ public class InGameNetManager : MonoBehaviour
         }
 
         StartNewRoundWhenEveryoneReadyPatch.StartNewRound(instance);
+
+        _roundId++;
+        _minAcceptedRoundId = _roundId;
+        _minAcceptedServerTick = _serverTick;
+        _latestServerTick = 0;
+        _latestServerTickTime = 0f;
+        ResetRemoteStateBuffers();
 
         UpdateShipReferences();
         if (LobbyManager.Instance.isHost)

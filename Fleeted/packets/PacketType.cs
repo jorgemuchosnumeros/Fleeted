@@ -6,6 +6,8 @@ public enum PacketType
     Ping,
     InputUpdate,
     WorldState,
+    BulletSpawn,
+    LeaderChange,
     BulletDestroy,
     TileDestroy,
     CameraState,

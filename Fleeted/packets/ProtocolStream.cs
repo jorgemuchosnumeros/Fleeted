@@ -114,9 +114,21 @@ public class ProtocolWriter : BinaryWriter
         Write(value.Active);
     }
 
+    public void Write(BulletSpawnPacket value)
+    {
+        Write(value.NetId);
+        Write(value.Position);
+        Write(value.Velocity);
+        Write(value.Rotation);
+        Write(value.Player);
+        Write(value.ParryPlayer);
+    }
+
     public void Write(WorldStatePacket value)
     {
+        Write(value.RoundId);
         Write(value.ServerTick);
+        Write(value.LeaderPlayer);
         Write(value.Ships.Count);
         foreach (var ship in value.Ships)
         {
@@ -130,9 +142,16 @@ public class ProtocolWriter : BinaryWriter
         }
     }
 
+    public void Write(LeaderChangePacket value)
+    {
+        Write(value.OldLeader);
+        Write(value.NewLeader);
+    }
+
     public void Write(BulletDestroyPacket value)
     {
         Write(value.NetId);
+        Write(value.Position);
     }
 
     public void Write(TileDestroyPacket value)
@@ -282,9 +301,24 @@ public class ProtocolReader : BinaryReader
         };
     }
 
+    public BulletSpawnPacket ReadBulletSpawnPacket()
+    {
+        return new BulletSpawnPacket
+        {
+            NetId = ReadInt32(),
+            Position = ReadVector2(),
+            Velocity = ReadVector2(),
+            Rotation = ReadSingle(),
+            Player = ReadInt32(),
+            ParryPlayer = ReadInt32(),
+        };
+    }
+
     public WorldStatePacket ReadWorldStatePacket()
     {
+        var roundId = ReadInt32();
         var serverTick = ReadInt32();
+        var leaderPlayer = ReadInt32();
         var shipCount = ReadInt32();
         var ships = new List<ShipStatePacket>(shipCount);
         for (var i = 0; i < shipCount; i++)
@@ -301,9 +335,20 @@ public class ProtocolReader : BinaryReader
 
         return new WorldStatePacket
         {
+            RoundId = roundId,
             ServerTick = serverTick,
+            LeaderPlayer = leaderPlayer,
             Ships = ships,
             Bullets = bullets,
+        };
+    }
+
+    public LeaderChangePacket ReadLeaderChangePacket()
+    {
+        return new LeaderChangePacket
+        {
+            OldLeader = ReadInt32(),
+            NewLeader = ReadInt32(),
         };
     }
 
@@ -312,6 +357,7 @@ public class ProtocolReader : BinaryReader
         return new BulletDestroyPacket
         {
             NetId = ReadInt32(),
+            Position = ReadVector2(),
         };
     }
 
