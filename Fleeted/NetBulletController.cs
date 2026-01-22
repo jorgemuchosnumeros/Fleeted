@@ -15,7 +15,7 @@ public class NetBulletController : MonoBehaviour
     private bool _isOwned;
     private int _netId;
     private const int InterpolationDelayTicks = 6;
-    private const float ReconcileDistanceThreshold = 0.2f;
+    private const float ReconcileDistanceThreshold = 0.05f;
 
     private void Awake()
     {
@@ -32,23 +32,36 @@ public class NetBulletController : MonoBehaviour
         if (GlobalController.globalController.screen != GlobalController.screens.game)
             Explode();
 
-        if (_latestState == null) return;
-
         if (_isOwned)
         {
             return;
         }
 
-        var renderTick = InGameNetManager.Instance.GetEstimatedServerTick() - InterpolationDelayTicks;
-        var state = GetInterpolatedState(renderTick);
-
-        if (!gameObject.activeSelf && state.Active)
+        Vector2 basePosition;
+        Vector2 velocity;
+        if (_latestState == null)
         {
-            gameObject.SetActive(true);
-        }
+            if (!InGameNetManager.UseBulletSpawnSync || _rb == null)
+                return;
 
-        _rb.velocity = state.Velocity;
-        transform.position = state.Position;
+            basePosition = _rb.position;
+            velocity = _rb.velocity;
+        }
+        else
+        {
+            var renderTick = InGameNetManager.Instance.GetEstimatedServerTick() - InterpolationDelayTicks;
+            var state = GetInterpolatedState(renderTick);
+
+            if (!gameObject.activeSelf && state.Active)
+            {
+                gameObject.SetActive(true);
+            }
+
+            _rb.velocity = state.Velocity;
+            basePosition = state.Position;
+            velocity = state.Velocity;
+        }
+        transform.position = basePosition;
     }
 
     private void OnDisable()
@@ -146,6 +159,12 @@ public class NetBulletController : MonoBehaviour
         }
     }
 
+    public void ResetNetState()
+    {
+        _stateBuffer.Clear();
+        _latestState = null;
+    }
+
     public void Explode()
     {
         var tr = typeof(BulletController).GetField("tr", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -162,7 +181,7 @@ public class NetBulletController : MonoBehaviour
         ExplodeAt(position);
     }
 
-    private void ExplodeAt(Vector2 position)
+    public void ExplodeAt(Vector2 position)
     {
         if (_bcontroller == null) return;
         if (_bcontroller.bulletsContainer == null)
