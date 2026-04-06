@@ -210,22 +210,13 @@ public static class ManageMinimenuStatePatch
     {
         if (!ApplyPlayOnlinePatch.IsOnlineOptionSelected) return true;
 
-        int num = 0;
-        int num2 = 0;
-
-        var playerState = (int[]) typeof(PlayMenuController)
-            .GetField("playerState", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(__instance);
-
-        for (var i = 1; i < 9; i++)
+        if (InputController.inputController.inputs["1BDown"] ||
+            InputController.inputController.inputsRaw["0BDown"])
         {
-            if (playerState[i - 1] == 1)
-            {
-                num++;
-            }
-            else if (playerState[i - 1] == 2)
-            {
-                num2++;
-            }
+            typeof(PlayMenuController)
+                .GetMethod("BackToMainmenu", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.Invoke(__instance, null);
+            return false;
         }
 
         ColorNextMiniMenuLabel(__instance);
